@@ -9,8 +9,9 @@ venv/
 dist/
 build/
 .DS_Store
-modelo/model.pkl
-modelo/label_encoder.pkl
+# El modelo entrenado SI se sube al repo (es un entregable del proyecto)
+# modelo/model.pkl
+# modelo/label_encoder.pkl
 logs/historial.json
 config/config.json
 # Dependencias de Node
