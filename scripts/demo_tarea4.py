@@ -1,14 +1,14 @@
 """
-Demo para Tarea 4 - HandTalk AI
-Muestra: captura de camara, deteccion de mano con MediaPipe y conteo de dedos levantados.
-Basado en los ejemplos del auxiliar (Clase 10).
+HandTalk AI - Reconocedor de senas LENSEGUA
+Detecta la mano en tiempo real con MediaPipe y clasifica gestos por posicion de dedos.
 
 Ejecutar:
     source .venv/bin/activate
     python scripts/demo_tarea4.py
 
-Controles:
-    Q  Cerrar la ventana
+Controles dentro de la ventana:
+    0-9  Cambiar camara en caliente
+    Q    Cerrar
 """
 
 import cv2
@@ -18,87 +18,109 @@ mp_manos = mp.solutions.hands
 mp_dibujo = mp.solutions.drawing_utils
 mp_estilos = mp.solutions.drawing_styles
 
-# Nombres de los 5 dedos para mostrar en pantalla
 NOMBRES_DEDOS = ["Pulgar", "Indice", "Medio", "Anular", "Menique"]
 
-# Señas de LESEGUA reconocidas por estado de dedos levantados
-# Esto es una version simplificada; el modelo ML completo usa landmarks normalizados
-GESTOS_LESEGUA = {
+# Mapeo simplificado de dedos levantados a senas LENSEGUA
+# El modelo ML completo (que se entrenara con el dataset) usara landmarks normalizados
+GESTOS_LENSEGUA = {
     (0, 0, 0, 0, 0): "silencio",
-    (1, 0, 0, 0, 0): "hola (pulgar)",
-    (0, 1, 0, 0, 0): "si (indice)",
-    (0, 0, 0, 0, 1): "no (menique)",
+    (1, 0, 0, 0, 0): "hola",
+    (0, 1, 0, 0, 0): "si",
+    (0, 0, 0, 0, 1): "no",
     (1, 1, 0, 0, 0): "bien",
     (0, 1, 1, 0, 0): "agua",
     (1, 0, 0, 0, 1): "gracias",
-    (1, 1, 1, 1, 1): "ayuda (mano abierta)",
+    (1, 1, 1, 1, 1): "ayuda",
 }
+
+
+def detectar_camaras() -> list:
+    """Prueba indices 0-9 y retorna los que tienen camara funcional."""
+    disponibles = []
+    for i in range(10):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                disponibles.append(i)
+        cap.release()
+    return disponibles
 
 
 def detectar_dedos_levantados(puntos: list) -> list:
     """
-    Detecta cuales dedos estan levantados comparando posiciones de landmarks.
-    Devuelve lista de 5 valores binarios: [pulgar, indice, medio, anular, menique]
+    Detecta cuales dedos estan levantados usando los landmarks de MediaPipe.
+    Retorna lista de 5 valores binarios: [pulgar, indice, medio, anular, menique]
     """
     dedos = [0, 0, 0, 0, 0]
 
-    # Pulgar: comparamos en el eje X porque se mueve horizontal
+    # Pulgar: se compara en eje X porque se mueve de forma horizontal
     if puntos[4][0] < puntos[3][0]:
         dedos[0] = 1
 
-    # Los demas dedos: la punta (tip) debe estar mas arriba que la articulacion media
-    pares = [(8, 6), (12, 10), (16, 14), (20, 18)]
-    for i, (tip, mid) in enumerate(pares):
-        if puntos[tip][1] < puntos[mid][1]:
+    # Resto de dedos: la punta debe estar mas arriba (menor Y) que la articulacion PIP
+    for i, (tip, pip) in enumerate([(8, 6), (12, 10), (16, 14), (20, 18)]):
+        if puntos[tip][1] < puntos[pip][1]:
             dedos[i + 1] = 1
 
     return dedos
 
 
-def dibujar_hud(frame, dedos: list, gesto: str, mano_detectada: bool):
-    """
-    Dibuja el HUD (heads-up display) con la informacion de deteccion sobre el frame.
-    """
+def dibujar_hud(frame, dedos: list, gesto: str, mano_detectada: bool, indice_cam: int, camaras: list):
+    """Superpone toda la informacion sobre el frame de la camara."""
     h, w = frame.shape[:2]
 
-    # Barra de estado arriba
-    cv2.rectangle(frame, (0, 0), (w, 50), (15, 15, 25), -1)
-    estado_txt = "MANO DETECTADA" if mano_detectada else "Esperando mano..."
-    color_estado = (0, 220, 80) if mano_detectada else (100, 100, 110)
-    cv2.putText(frame, "HandTalk AI  |  Tarea 4  |  " + estado_txt,
-                (12, 33), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color_estado, 2)
+    # Franja superior con titulo, camara activa y lista de disponibles
+    cv2.rectangle(frame, (0, 0), (w, 52), (12, 12, 22), -1)
+    cams_txt = "  cam:" + str(indice_cam) + "  [" + "/".join(str(c) for c in camaras) + "]"
+    cv2.putText(frame, "HandTalk AI  |  LENSEGUA" + cams_txt,
+                (12, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (150, 150, 160), 1)
+
+    color_estado = (0, 220, 80) if mano_detectada else (90, 90, 100)
+    estado_txt = "Mano detectada" if mano_detectada else "Esperando mano..."
+    cv2.putText(frame, estado_txt + "   [0-9] camara  [Q] salir",
+                (12, 44), cv2.FONT_HERSHEY_SIMPLEX, 0.50, color_estado, 1)
 
     if not mano_detectada:
         return
 
-    # Panel inferior con el gesto y el conteo
-    cv2.rectangle(frame, (0, h - 90), (w, h), (15, 15, 25), -1)
-
-    total_dedos = sum(dedos)
-    cv2.putText(frame, f"Dedos levantados: {total_dedos}",
-                (12, h - 56), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (200, 200, 200), 2)
-
-    # Indicadores individuales de cada dedo
-    for i, (nombre, activo) in enumerate(zip(NOMBRES_DEDOS, dedos)):
-        color = (0, 220, 80) if activo else (60, 60, 80)
-        x = 12 + i * 120
-        cv2.rectangle(frame, (x, h - 46), (x + 112, h - 8), color, -1)
-        cv2.putText(frame, nombre, (x + 6, h - 18),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255) if activo else (120, 120, 130), 1)
-
-    # Nombre del gesto reconocido
+    # Nombre del gesto en grande, encima del panel inferior
     if gesto:
         cv2.putText(frame, gesto.upper(), (12, h - 100),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 200, 255), 3)
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 200, 255), 3)
+
+    # Franja inferior con chips de dedos
+    cv2.rectangle(frame, (0, h - 85), (w, h), (12, 12, 22), -1)
+    total = sum(dedos)
+    cv2.putText(frame, f"Dedos levantados: {total}",
+                (12, h - 58), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (190, 190, 190), 2)
+
+    ancho_chip = w // 5 - 6
+    for i, (nombre, activo) in enumerate(zip(NOMBRES_DEDOS, dedos)):
+        color_bg = (0, 140, 50) if activo else (40, 40, 60)
+        color_txt = (255, 255, 255) if activo else (100, 100, 110)
+        x0 = 4 + i * (ancho_chip + 6)
+        cv2.rectangle(frame, (x0, h - 48), (x0 + ancho_chip, h - 6), color_bg, -1)
+        cv2.putText(frame, nombre, (x0 + 6, h - 18),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.44, color_txt, 1)
 
 
 def main():
-    print("=== HandTalk AI - Demo Tarea 4 ===")
-    print("Presiona Q para salir")
+    camaras = detectar_camaras()
 
-    cap = cv2.VideoCapture(0)
+    if not camaras:
+        print("Error: no se encontro ninguna camara disponible")
+        return
+
+    # Arranca directamente en la primera camara sin mostrar selector
+    indice_cam = camaras[0]
+    print(f"Iniciando HandTalk AI en camara {indice_cam}")
+    print(f"Camaras disponibles: {camaras}")
+    print("Usa teclas 0-9 para cambiar de camara en caliente. Q para salir.")
+
+    cap = cv2.VideoCapture(indice_cam)
     if not cap.isOpened():
-        print("Error: no se pudo abrir la camara")
+        print(f"Error: no se pudo abrir la camara {indice_cam}")
         return
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -113,10 +135,9 @@ def main():
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("Error al leer frame de la camara")
                 break
 
-            # Espejamos para que sea mas natural (como mirarse al espejo)
+            # Espejo para que sea mas natural al usuario
             frame = cv2.flip(frame, 1)
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             resultado = detector.process(rgb)
@@ -128,37 +149,40 @@ def main():
             if resultado.multi_hand_landmarks:
                 mano_detectada = True
                 for mano_lm in resultado.multi_hand_landmarks:
-                    # Dibujar los 21 landmarks y sus conexiones
                     mp_dibujo.draw_landmarks(
-                        frame,
-                        mano_lm,
-                        mp_manos.HAND_CONNECTIONS,
+                        frame, mano_lm, mp_manos.HAND_CONNECTIONS,
                         mp_estilos.get_default_hand_landmarks_style(),
                         mp_estilos.get_default_hand_connections_style()
                     )
-
                     h_px, w_px = frame.shape[:2]
                     puntos = [
                         (int(lm.x * w_px), int(lm.y * h_px))
                         for lm in mano_lm.landmark
                     ]
-
                     dedos = detectar_dedos_levantados(puntos)
-                    gesto = GESTOS_LESEGUA.get(tuple(dedos), "gesto personalizado")
+                    gesto = GESTOS_LENSEGUA.get(tuple(dedos), "")
 
-                    # Mostramos en consola para el video
-                    print(f"Dedos: {dedos}  |  Gesto: {gesto}")
+            dibujar_hud(frame, dedos, gesto, mano_detectada, indice_cam, camaras)
+            cv2.imshow("HandTalk AI", frame)
 
-            dibujar_hud(frame, dedos, gesto, mano_detectada)
+            tecla = cv2.waitKey(1) & 0xFF
 
-            cv2.imshow("HandTalk AI - Demo Tarea 4", frame)
+            # Cambiar camara en caliente con teclas numericas
+            if tecla != 255 and chr(tecla).isdigit() and int(chr(tecla)) in camaras:
+                nuevo = int(chr(tecla))
+                if nuevo != indice_cam:
+                    cap.release()
+                    indice_cam = nuevo
+                    cap = cv2.VideoCapture(indice_cam)
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    print(f"Cambiando a camara {indice_cam}")
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if tecla == ord('q'):
                 break
 
     cap.release()
     cv2.destroyAllWindows()
-    print("Demo cerrado.")
 
 
 if __name__ == "__main__":
