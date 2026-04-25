@@ -5,7 +5,7 @@
         <span class="navbar__icon">✋</span>
         <span class="navbar__titulo">HandTalk AI</span>
         <span class="badge badge-gris" style="margin-left: 8px; font-size: 11px"
-          >LESEGUA</span
+          >LENSEGUA</span
         >
       </div>
       <div class="navbar__links">

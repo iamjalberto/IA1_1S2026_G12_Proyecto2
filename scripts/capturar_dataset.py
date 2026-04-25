@@ -1,5 +1,5 @@
 """
-Script para recolectar el dataset de señas de LESEGUA.
+Script para recolectar el dataset de señas de LENSEGUA.
 Usa MediaPipe para detectar la mano y extrae 63 landmarks normalizados por captura.
 Los datos se guardan en dataset/dataset.csv.
 
@@ -17,14 +17,15 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
-# Las 10 senas de LESEGUA que vamos a reconocer
+# Las 10 senas de LENSEGUA que vamos a reconocer
 CLASES = [
     "hola", "gracias", "si", "no", "ayuda",
     "agua", "bien", "mal", "por_favor", "casa"
 ]
 
 # Cuantas muestras capturar por clase en cada sesion de grabacion
-MUESTRAS_POR_CLASE = 150
+# El enunciado no especifica un minimo; con 100 se obtiene un modelo decente
+MUESTRAS_POR_CLASE = 100
 
 # Ruta del CSV donde se acumula el dataset
 RUTA_CSV = os.path.normpath(
