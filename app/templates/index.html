@@ -1,0 +1,227 @@
+{% extends "base.html" %} {% block titulo %}HandTalk AI - Reconocimiento de
+Senas{% endblock %} {% block contenido %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Columna izquierda: video en vivo -->
+  <div class="lg:col-span-2">
+    <div class="card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-slate-300">Camara en vivo</h2>
+        {% if modelo_listo %}
+        <span class="badge badge-green">Modelo cargado</span>
+        {% else %}
+        <span class="badge badge-yellow"
+          >Sin modelo &mdash; ejecuta entrenar_modelo.py</span
+        >
+        {% endif %}
+      </div>
+
+      <!-- Stream MJPEG: el navegador conecta directamente a /video_stream -->
+      <img
+        src="/video_stream"
+        id="stream"
+        class="w-full rounded-lg"
+        style="max-height: 480px; object-fit: contain; background: #000"
+        alt="Video en vivo"
+      />
+    </div>
+  </div>
+
+  <!-- Columna derecha: prediccion y controles -->
+  <div class="flex flex-col gap-4">
+    <!-- Sena detectada -->
+    <div class="card p-5 text-center">
+      <p class="text-sm text-slate-500 mb-1">Sena detectada</p>
+      <div
+        id="sena-display"
+        class="text-4xl font-bold mt-1"
+        style="color: #4ade80; min-height: 52px"
+      >
+        &mdash;
+      </div>
+
+      <!-- Barra de confianza -->
+      <div class="mt-3">
+        <div class="flex justify-between text-xs text-slate-500 mb-1">
+          <span>Confianza</span>
+          <span id="conf-texto">0%</span>
+        </div>
+        <div
+          class="w-full rounded-full"
+          style="background: #1e2535; height: 10px"
+        >
+          <div
+            id="barra-conf"
+            class="rounded-full transition-all duration-300"
+            style="width: 0%; height: 10px; background: #4ade80"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Estado de la mano -->
+      <p id="estado-mano" class="text-xs text-slate-600 mt-3">
+        Sin mano detectada
+      </p>
+    </div>
+
+    <!-- Boton Telegram -->
+    <div class="card p-4">
+      <button
+        id="btn-telegram"
+        class="w-full py-3 rounded-lg font-semibold text-sm transition-all"
+        style="background: #2563eb; color: #fff"
+        onmouseover="this.style.background = '#1d4ed8'"
+        onmouseout="this.style.background = '#2563eb'"
+      >
+        Enviar a Telegram
+      </button>
+      <p id="msg-telegram" class="text-xs text-center mt-2 text-slate-500"></p>
+
+      {% if not config.telegram_activo %}
+      <p class="text-xs text-center mt-1" style="color: #fbbf24">
+        Telegram desactivado. Activalo en
+        <a href="/admin" style="color: #60a5fa; text-decoration: underline"
+          >Administracion</a
+        >.
+      </p>
+      {% endif %}
+    </div>
+
+    <!-- Umbral de confianza configurado -->
+    <div class="card p-4 text-sm text-slate-400">
+      <span>Umbral actual:</span>
+      <span class="font-semibold text-slate-200"
+        >{{ (config.umbral_confianza * 100)|int }}%</span
+      >
+      <a href="/admin" class="ml-2 text-xs" style="color: #60a5fa">Cambiar</a>
+    </div>
+
+    <!-- Historial reciente -->
+    <div class="card p-4 flex-1">
+      <h3 class="text-sm font-semibold text-slate-400 mb-3">
+        Historial reciente
+      </h3>
+      <ul
+        id="historial-lista"
+        class="space-y-1 text-sm"
+        style="max-height: 220px; overflow-y: auto"
+      >
+        <li class="text-slate-600 text-xs">
+          Las detecciones apareceran aqui...
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Guardamos la ultima sena para no duplicar historial
+  let ultimaSena = null;
+  let ultimaConfianza = 0;
+
+  // Consultamos /estado cada 400ms para actualizar la UI sin recargar la pagina
+  async function actualizarEstado() {
+    try {
+      const data = await fetch("/estado").then((r) => r.json());
+
+      const displaySena = document.getElementById("sena-display");
+      const barraConf = document.getElementById("barra-conf");
+      const confTexto = document.getElementById("conf-texto");
+      const estadoMano = document.getElementById("estado-mano");
+
+      if (data.sena) {
+        displaySena.textContent = data.sena;
+        displaySena.style.color = "#4ade80";
+        const pct = Math.round(data.confianza * 100);
+        barraConf.style.width = pct + "%";
+        confTexto.textContent = pct + "%";
+        estadoMano.textContent = "Mano detectada";
+        estadoMano.style.color = "#4ade80";
+
+        // Agregar al historial local si es una sena nueva
+        if (data.sena !== ultimaSena) {
+          agregarHistorial(data.sena, data.confianza);
+          ultimaSena = data.sena;
+          ultimaConfianza = data.confianza;
+        }
+      } else if (data.mano_detectada) {
+        displaySena.textContent = "...";
+        displaySena.style.color = "#fbbf24";
+        barraConf.style.width = "0%";
+        confTexto.textContent = "—";
+        estadoMano.textContent = "Mano detectada, analizando";
+        estadoMano.style.color = "#fbbf24";
+      } else {
+        displaySena.textContent = "—";
+        displaySena.style.color = "#475569";
+        barraConf.style.width = "0%";
+        confTexto.textContent = "0%";
+        estadoMano.textContent = "Sin mano detectada";
+        estadoMano.style.color = "#475569";
+        ultimaSena = null;
+      }
+    } catch (e) {
+      // silencio si hay error de red temporal
+    }
+  }
+
+  function agregarHistorial(sena, confianza) {
+    const lista = document.getElementById("historial-lista");
+    // Limpiar mensaje de placeholder
+    if (
+      lista.children.length === 1 &&
+      lista.children[0].textContent.includes("apareceran")
+    ) {
+      lista.innerHTML = "";
+    }
+    const hora = new Date().toLocaleTimeString("es-GT", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const li = document.createElement("li");
+    li.className = "flex justify-between text-slate-300";
+    li.innerHTML = `
+      <span style="color:#4ade80; font-weight:600;">${sena}</span>
+      <span class="text-slate-500">${Math.round(confianza * 100)}% &nbsp; ${hora}</span>
+    `;
+    lista.prepend(li);
+    // Mostrar solo los ultimos 20
+    while (lista.children.length > 20) lista.removeChild(lista.lastChild);
+  }
+
+  // Enviar a Telegram
+  document
+    .getElementById("btn-telegram")
+    .addEventListener("click", async () => {
+      const msg = document.getElementById("msg-telegram");
+      if (!ultimaSena) {
+        msg.textContent = "No hay sena detectada para enviar.";
+        msg.style.color = "#f87171";
+        return;
+      }
+
+      msg.textContent = "Enviando...";
+      msg.style.color = "#94a3b8";
+
+      try {
+        const res = await fetch("/enviar_telegram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sena: ultimaSena,
+            confianza: ultimaConfianza,
+          }),
+        }).then((r) => r.json());
+
+        msg.textContent = res.mensaje;
+        msg.style.color = res.exito ? "#4ade80" : "#f87171";
+      } catch (e) {
+        msg.textContent = "Error al conectar con el servidor.";
+        msg.style.color = "#f87171";
+      }
+    });
+
+  setInterval(actualizarEstado, 400);
+  actualizarEstado();
+</script>
+{% endblock %}

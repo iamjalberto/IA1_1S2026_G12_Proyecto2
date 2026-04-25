@@ -1,0 +1,566 @@
+<template>
+  <div class="vista-admin">
+    <div style="margin-bottom: 20px">
+      <h1 style="font-size: 22px; font-weight: 700">Panel de Administracion</h1>
+      <p style="color: var(--texto-suave); font-size: 14px; margin-top: 4px">
+        Configuracion y monitoreo del sistema HandTalk AI
+      </p>
+    </div>
+
+    <!-- Tabs de navegacion interna -->
+    <div class="tabs">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        class="tab"
+        :class="{ 'tab--activa': tabActiva === tab.id }"
+        @click="tabActiva = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <!-- TAB: Configuracion -->
+    <div v-show="tabActiva === 'config'" class="card">
+      <h2 class="seccion-titulo">Parametros del sistema</h2>
+      <hr class="separador" />
+
+      <div class="campo-grupo">
+        <label
+          >Umbral de confianza ({{
+            (config.umbral_confianza * 100).toFixed(0)
+          }}%)</label
+        >
+        <input
+          type="range"
+          min="0.3"
+          max="0.99"
+          step="0.01"
+          v-model.number="config.umbral_confianza"
+          style="width: 100%; accent-color: var(--azul)"
+        />
+        <p class="campo-hint">
+          Solo se aceptan predicciones con confianza mayor a este valor.
+        </p>
+      </div>
+
+      <div class="campo-grupo">
+        <label>Formato del mensaje de Telegram</label>
+        <textarea
+          v-model="config.formato_mensaje"
+          rows="3"
+          placeholder="Ej: Deteccion HandTalk AI: {sena} ({confianza})"
+        ></textarea>
+        <p class="campo-hint">
+          Usa {sena} y {confianza} como variables dinamicas.
+        </p>
+      </div>
+
+      <div class="campo-grupo">
+        <label>Chat ID de Telegram</label>
+        <input
+          type="text"
+          v-model="config.telegram_chat_id"
+          placeholder="-1001234567890"
+        />
+        <p class="campo-hint">
+          ID del grupo o canal donde se enviaran los mensajes.
+        </p>
+      </div>
+
+      <div class="campo-grupo">
+        <label>Envio a Telegram</label>
+        <div class="toggle-fila">
+          <span>{{ config.telegram_activo ? "Activado" : "Desactivado" }}</span>
+          <button
+            class="toggle-btn"
+            :class="{ activo: config.telegram_activo }"
+            @click="config.telegram_activo = !config.telegram_activo"
+          >
+            <div class="toggle-circulo"></div>
+          </button>
+        </div>
+      </div>
+
+      <div class="campo-grupo">
+        <label>Historial de detecciones</label>
+        <div class="toggle-fila">
+          <span>{{
+            config.historial_habilitado ? "Habilitado" : "Deshabilitado"
+          }}</span>
+          <button
+            class="toggle-btn"
+            :class="{ activo: config.historial_habilitado }"
+            @click="config.historial_habilitado = !config.historial_habilitado"
+          >
+            <div class="toggle-circulo"></div>
+          </button>
+        </div>
+      </div>
+
+      <hr class="separador" />
+
+      <button class="btn btn-azul" :disabled="guardando" @click="guardarConfig">
+        {{ guardando ? "Guardando..." : "Guardar configuracion" }}
+      </button>
+    </div>
+
+    <!-- TAB: Metricas -->
+    <div v-show="tabActiva === 'metricas'" class="card">
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        "
+      >
+        <h2 class="seccion-titulo">Metricas de desempeno</h2>
+        <button
+          class="btn btn-gris"
+          style="padding: 6px 14px; font-size: 12px"
+          @click="cargarMetricas"
+        >
+          Actualizar
+        </button>
+      </div>
+      <hr class="separador" />
+
+      <div class="metricas-grid">
+        <div class="metrica-card">
+          <div class="metrica-valor">{{ resumen.total_detecciones }}</div>
+          <div class="metrica-label">Total de detecciones</div>
+        </div>
+        <div class="metrica-card">
+          <div class="metrica-valor">{{ resumen.total_enviados_telegram }}</div>
+          <div class="metrica-label">Enviados a Telegram</div>
+        </div>
+        <div class="metrica-card">
+          <div class="metrica-valor">
+            {{ (resumen.confianza_promedio * 100).toFixed(1) }}%
+          </div>
+          <div class="metrica-label">Confianza promedio</div>
+        </div>
+        <div class="metrica-card">
+          <div class="metrica-valor">
+            {{ Object.keys(resumen.por_clase || {}).length }}
+          </div>
+          <div class="metrica-label">Clases detectadas</div>
+        </div>
+      </div>
+
+      <div
+        v-if="Object.keys(resumen.por_clase || {}).length > 0"
+        style="margin-top: 20px"
+      >
+        <h3
+          style="
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--texto-suave);
+          "
+        >
+          Por clase
+        </h3>
+        <div class="tabla-contenedor">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Seña</th>
+                <th>Detecciones</th>
+                <th>Confianza prom.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(datos, sena) in resumen.por_clase" :key="sena">
+                <td>
+                  <span class="badge badge-azul">{{ sena }}</span>
+                </td>
+                <td>{{ datos.total }}</td>
+                <td>
+                  <div class="barra-confianza" style="max-width: 120px">
+                    <div
+                      class="barra-confianza__relleno"
+                      :style="{ width: datos.confianza_promedio * 100 + '%' }"
+                    ></div>
+                  </div>
+                  <small
+                    >{{ (datos.confianza_promedio * 100).toFixed(1) }}%</small
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div
+        v-else
+        style="color: var(--texto-suave); font-size: 14px; padding: 20px 0"
+      >
+        Todavia no hay detecciones registradas.
+      </div>
+    </div>
+
+    <!-- TAB: Historial -->
+    <div v-show="tabActiva === 'historial'" class="card">
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        "
+      >
+        <h2 class="seccion-titulo">Historial de detecciones</h2>
+        <div style="display: flex; gap: 8px">
+          <button
+            class="btn btn-gris"
+            style="padding: 6px 14px; font-size: 12px"
+            @click="cargarHistorial"
+          >
+            Actualizar
+          </button>
+          <button
+            class="btn btn-rojo"
+            style="padding: 6px 14px; font-size: 12px"
+            @click="limpiarHistorial"
+          >
+            Limpiar
+          </button>
+        </div>
+      </div>
+      <hr class="separador" />
+
+      <div
+        v-if="historial.length === 0"
+        style="color: var(--texto-suave); font-size: 14px; padding: 20px 0"
+      >
+        No hay registros en el historial.
+      </div>
+
+      <div v-else class="tabla-contenedor">
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Fecha y hora</th>
+              <th>Seña</th>
+              <th>Confianza</th>
+              <th>Telegram</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(reg, i) in historial" :key="i">
+              <td style="color: var(--texto-suave); font-size: 12px">
+                {{ reg.timestamp }}
+              </td>
+              <td>
+                <span class="badge badge-azul">{{ reg.sena }}</span>
+              </td>
+              <td>{{ (reg.confianza * 100).toFixed(0) }}%</td>
+              <td>
+                <span v-if="reg.enviado_telegram" class="badge badge-verde"
+                  >Si</span
+                >
+                <span v-else class="badge badge-gris">No</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <Transition name="toast">
+      <div v-if="toast.visible" class="toast" :class="toast.tipo">
+        {{ toast.texto }}
+      </div>
+    </Transition>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from "vue";
+
+const tabs = [
+  { id: "config", label: "Configuracion" },
+  { id: "metricas", label: "Metricas" },
+  { id: "historial", label: "Historial" },
+];
+
+const tabActiva = ref("config");
+const guardando = ref(false);
+const toast = ref({ visible: false, texto: "", tipo: "exito" });
+
+const config = ref({
+  umbral_confianza: 0.7,
+  formato_mensaje:
+    "Deteccion HandTalk AI:\nSena: {sena}\nConfianza: {confianza}",
+  telegram_activo: false,
+  telegram_chat_id: "",
+  historial_habilitado: true,
+});
+
+const resumen = ref({
+  total_detecciones: 0,
+  total_enviados_telegram: 0,
+  confianza_promedio: 0,
+  por_clase: {},
+});
+
+const historial = ref([]);
+
+function mostrarToast(texto, tipo = "exito") {
+  toast.value = { visible: true, texto, tipo };
+  setTimeout(() => {
+    toast.value.visible = false;
+  }, 3000);
+}
+
+async function cargarDatos() {
+  try {
+    const res = await fetch("/admin/");
+    if (res.ok) {
+      const data = await res.json();
+      // Solo sobreescribimos los campos que vienen del servidor, preservando ediciones locales
+      Object.assign(config.value, data.config);
+      resumen.value = data.resumen;
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function cargarMetricas() {
+  try {
+    const res = await fetch("/admin/metricas");
+    if (res.ok) {
+      resumen.value = await res.json();
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function cargarHistorial() {
+  try {
+    const res = await fetch("/admin/historial?limite=100");
+    if (res.ok) {
+      historial.value = await res.json();
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function guardarConfig() {
+  guardando.value = true;
+  try {
+    const res = await fetch("/admin/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config.value),
+    });
+    const data = await res.json();
+    if (data.exito) {
+      mostrarToast("Configuracion guardada correctamente", "exito");
+    } else {
+      mostrarToast("Error al guardar la configuracion", "error");
+    }
+  } catch {
+    mostrarToast("Error de conexion con el backend", "error");
+  } finally {
+    guardando.value = false;
+  }
+}
+
+async function limpiarHistorial() {
+  if (!confirm("Seguro que quieres limpiar todo el historial?")) return;
+  try {
+    await fetch("/admin/limpiar_historial", { method: "POST" });
+    historial.value = [];
+    resumen.value = {
+      total_detecciones: 0,
+      total_enviados_telegram: 0,
+      confianza_promedio: 0,
+      por_clase: {},
+    };
+    mostrarToast("Historial limpiado", "exito");
+  } catch {
+    mostrarToast("Error al limpiar el historial", "error");
+  }
+}
+
+onMounted(() => {
+  cargarDatos();
+  cargarHistorial();
+});
+</script>
+
+<style scoped>
+.vista-admin {
+  max-width: 900px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--borde);
+  padding-bottom: 0;
+}
+
+.tab {
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  color: var(--texto-suave);
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+  border-radius: 0;
+}
+
+.tab:hover {
+  color: var(--texto);
+}
+
+.tab--activa {
+  color: var(--texto);
+  border-bottom-color: var(--azul);
+  font-weight: 600;
+}
+
+.seccion-titulo {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.campo-grupo {
+  margin-bottom: 18px;
+}
+
+.campo-hint {
+  font-size: 12px;
+  color: var(--texto-suave);
+  margin-top: 5px;
+}
+
+/* Toggle switch */
+.toggle-fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-btn {
+  width: 46px;
+  height: 26px;
+  background: #2d3348;
+  border: none;
+  border-radius: 13px;
+  padding: 3px;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-btn.activo {
+  background: var(--azul);
+  justify-content: flex-end;
+}
+
+.toggle-circulo {
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transition: margin 0.2s;
+}
+
+/* Metricas */
+.metricas-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .metricas-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.metrica-card {
+  background: #12151f;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+
+.metrica-valor {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--azul);
+}
+
+.metrica-label {
+  font-size: 12px;
+  color: var(--texto-suave);
+  margin-top: 4px;
+}
+
+/* Tabla */
+.tabla-contenedor {
+  overflow-x: auto;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tabla th {
+  text-align: left;
+  padding: 10px 14px;
+  background: #12151f;
+  color: var(--texto-suave);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.tabla td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #1a1d27;
+  vertical-align: middle;
+}
+
+.tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.tabla tr:hover td {
+  background: #1a1d27;
+}
+
+/* Toast transition */
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+</style>

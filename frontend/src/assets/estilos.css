@@ -1,0 +1,244 @@
+/* Variables globales del tema oscuro */
+:root {
+  --bg-base: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-card-hover: #21253a;
+  --borde: #2d3348;
+  --texto: #e2e8f0;
+  --texto-suave: #94a3b8;
+  --verde: #22c55e;
+  --verde-oscuro: #16a34a;
+  --azul: #3b82f6;
+  --azul-oscuro: #2563eb;
+  --rojo: #ef4444;
+  --amarillo: #f59e0b;
+  --radio: 10px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--texto);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* Clases de utilidad reutilizables */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 20px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  transition:
+    opacity 0.15s,
+    transform 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-verde {
+  background: var(--verde);
+  color: #fff;
+}
+
+.btn-azul {
+  background: var(--azul);
+  color: #fff;
+}
+
+.btn-rojo {
+  background: var(--rojo);
+  color: #fff;
+}
+
+.btn-gris {
+  background: #2d3348;
+  color: var(--texto);
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-verde {
+  background: #14532d;
+  color: #86efac;
+}
+.badge-rojo {
+  background: #450a0a;
+  color: #fca5a5;
+}
+.badge-azul {
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+.badge-gris {
+  background: #1e2432;
+  color: var(--texto-suave);
+}
+
+/* Barra de progreso de confianza */
+.barra-confianza {
+  width: 100%;
+  height: 8px;
+  background: #1e2432;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.barra-confianza__relleno {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  background: linear-gradient(90deg, var(--azul), var(--verde));
+}
+
+/* Indicador de punto pulsante */
+.punto-vivo {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: pulsar 1.5s infinite;
+}
+
+.punto-vivo.verde {
+  background: var(--verde);
+  box-shadow: 0 0 6px var(--verde);
+}
+.punto-vivo.gris {
+  background: #4b5563;
+}
+
+@keyframes pulsar {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Separador */
+hr.separador {
+  border: none;
+  border-top: 1px solid var(--borde);
+  margin: 16px 0;
+}
+
+/* Inputs / Selects / Textarea */
+input[type="text"],
+input[type="number"],
+input[type="password"],
+textarea,
+select {
+  width: 100%;
+  padding: 9px 12px;
+  background: #0f1117;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--azul);
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+/* Toast de notificacion */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 9999;
+  animation: aparecerToast 0.3s ease;
+}
+
+.toast.exito {
+  background: #14532d;
+  color: #86efac;
+  border: 1px solid #16a34a;
+}
+.toast.error {
+  background: #450a0a;
+  color: #fca5a5;
+  border: 1px solid #b91c1c;
+}
+
+@keyframes aparecerToast {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--borde);
+  border-radius: 3px;
+}

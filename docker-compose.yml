@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  # Backend: Flask + OpenCV + MediaPipe + scikit-learn
+  backend:
+    build: .
+    container_name: handtalk_backend
+    ports:
+      - "5000:5000"
+    # Pasar el dispositivo de camara al contenedor
+    devices:
+      - "/dev/video0:/dev/video0"
+    volumes:
+      # Montar en volumen para que el dataset, modelo y logs persistan fuera del contenedor
+      - ./dataset:/app/dataset
+      - ./modelo:/app/modelo
+      - ./logs:/app/logs
+      - ./config:/app/config
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  # Frontend: Vue 3 con Vite en modo desarrollo
+  frontend:
+    build: ./frontend
+    container_name: handtalk_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      # Montamos el codigo para hot reload sin reconstruir la imagen
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      # Le decimos a Vite donde esta el backend para configurar el proxy
+      - BACKEND_TARGET=http://backend:5000
+    depends_on:
+      - backend
+    restart: unless-stopped

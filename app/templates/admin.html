@@ -1,0 +1,319 @@
+{% extends "base.html" %} {% block titulo %}Administracion - HandTalk AI{%
+endblock %} {% block contenido %}
+<h1 class="text-2xl font-bold mb-6 text-slate-200">Panel de Administracion</h1>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Configuracion del sistema -->
+  <div class="card p-6">
+    <h2 class="text-lg font-semibold text-slate-300 mb-4">
+      Configuracion del sistema
+    </h2>
+    <form id="form-config" class="space-y-5">
+      <!-- Umbral de confianza -->
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">
+          Umbral de confianza:
+          <span id="umbral-valor" class="font-bold text-slate-200">
+            {{ (config.umbral_confianza * 100)|int }}%
+          </span>
+        </label>
+        <input
+          type="range"
+          id="umbral"
+          name="umbral_confianza"
+          min="30"
+          max="99"
+          step="1"
+          value="{{ (config.umbral_confianza * 100)|int }}"
+          class="w-full accent-blue-500"
+          oninput="
+            document.getElementById('umbral-valor').textContent =
+              this.value + '%'
+          "
+        />
+        <p class="text-xs text-slate-600 mt-1">
+          Predicciones por debajo de este umbral se ignoran.
+        </p>
+      </div>
+
+      <!-- Telegram activo -->
+      <div class="flex items-center gap-3">
+        <input
+          type="checkbox"
+          id="telegram_activo"
+          name="telegram_activo"
+          {%
+          if
+          config.telegram_activo
+          %}checked{%
+          endif
+          %}
+          class="w-5 h-5 accent-blue-500"
+        />
+        <label for="telegram_activo" class="text-sm text-slate-300">
+          Habilitar envio a Telegram
+        </label>
+      </div>
+
+      <!-- Chat ID -->
+      <div>
+        <label for="telegram_chat_id" class="block text-sm text-slate-400 mb-1"
+          >Chat ID de Telegram</label
+        >
+        <input
+          type="text"
+          id="telegram_chat_id"
+          name="telegram_chat_id"
+          value="{{ config.telegram_chat_id }}"
+          placeholder="Ej: -100123456789"
+          class="w-full rounded-lg px-3 py-2 text-sm"
+          style="background: #0f1117; border: 1px solid #2d3348; color: #e2e8f0"
+        />
+        <p class="text-xs text-slate-600 mt-1">
+          Usa @userinfobot en Telegram para obtener tu Chat ID.
+        </p>
+      </div>
+
+      <!-- Formato del mensaje -->
+      <div>
+        <label for="formato_mensaje" class="block text-sm text-slate-400 mb-1"
+          >Formato del mensaje</label
+        >
+        <textarea
+          id="formato_mensaje"
+          name="formato_mensaje"
+          rows="3"
+          class="w-full rounded-lg px-3 py-2 text-sm font-mono"
+          style="background: #0f1117; border: 1px solid #2d3348; color: #e2e8f0"
+        >
+{{ config.formato_mensaje }}</textarea
+        >
+        <p class="text-xs text-slate-600 mt-1">
+          Variables disponibles: <code>{sena}</code>, <code>{confianza}</code>
+        </p>
+      </div>
+
+      <!-- Historial habilitado -->
+      <div class="flex items-center gap-3">
+        <input
+          type="checkbox"
+          id="historial_habilitado"
+          name="historial_habilitado"
+          {%
+          if
+          config.historial_habilitado
+          %}checked{%
+          endif
+          %}
+          class="w-5 h-5 accent-blue-500"
+        />
+        <label for="historial_habilitado" class="text-sm text-slate-300">
+          Registrar historial de detecciones
+        </label>
+      </div>
+
+      <button
+        type="submit"
+        class="w-full py-2 rounded-lg font-semibold text-sm"
+        style="background: #2563eb; color: #fff"
+      >
+        Guardar configuracion
+      </button>
+      <p id="msg-config" class="text-xs text-center text-slate-500"></p>
+    </form>
+  </div>
+
+  <!-- Metricas de desempeno -->
+  <div class="flex flex-col gap-4">
+    <!-- Tarjetas de resumen -->
+    <div class="card p-5">
+      <h2 class="text-lg font-semibold text-slate-300 mb-4">
+        Metricas de desempeno
+      </h2>
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div class="rounded-lg p-3" style="background: #0f1117">
+          <div class="text-2xl font-bold" style="color: #60a5fa">
+            {{ resumen.total_detecciones }}
+          </div>
+          <div class="text-xs text-slate-500 mt-1">Detecciones</div>
+        </div>
+        <div class="rounded-lg p-3" style="background: #0f1117">
+          <div class="text-2xl font-bold" style="color: #4ade80">
+            {{ resumen.total_enviados_telegram }}
+          </div>
+          <div class="text-xs text-slate-500 mt-1">Enviados</div>
+        </div>
+        <div class="rounded-lg p-3" style="background: #0f1117">
+          <div class="text-2xl font-bold" style="color: #fbbf24">
+            {% if resumen.confianza_promedio > 0 %} {{
+            (resumen.confianza_promedio * 100)|int }}% {% else %} &mdash; {%
+            endif %}
+          </div>
+          <div class="text-xs text-slate-500 mt-1">Conf. promedio</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detecciones por clase -->
+    <div class="card p-5">
+      <h2 class="text-base font-semibold text-slate-300 mb-3">
+        Detecciones por sena
+      </h2>
+      {% if resumen.por_clase %}
+      <table class="w-full text-sm">
+        <thead>
+          <tr
+            class="text-xs text-slate-500 border-b"
+            style="border-color: #2d3348"
+          >
+            <th class="text-left pb-2">Sena</th>
+            <th class="text-right pb-2">Total</th>
+            <th class="text-right pb-2">Conf. prom.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sena, datos in resumen.por_clase.items() %}
+          <tr class="border-b" style="border-color: #1e2535">
+            <td class="py-1 font-medium" style="color: #4ade80">{{ sena }}</td>
+            <td class="text-right text-slate-300">{{ datos.total }}</td>
+            <td class="text-right text-slate-400">
+              {{ (datos.confianza_promedio * 100)|int }}%
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-sm text-slate-600">
+        Sin detecciones aun. Usa el sistema para ver estadisticas.
+      </p>
+      {% endif %}
+    </div>
+
+    <!-- Señas disponibles -->
+    <div class="card p-5">
+      <h2 class="text-base font-semibold text-slate-300 mb-3">
+        Senas disponibles en el sistema
+      </h2>
+      <div class="flex flex-wrap gap-2">
+        {% for sena in config.senas_disponibles %}
+        <span class="badge" style="background: #1e2535; color: #94a3b8"
+          >{{ sena }}</span
+        >
+        {% endfor %}
+      </div>
+      {% if not modelo_listo %}
+      <p class="text-xs mt-3" style="color: #fbbf24">
+        El modelo no esta entrenado. Ejecuta
+        <code>python scripts/entrenar_modelo.py</code>.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Historial de detecciones -->
+<div class="card p-6 mt-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold text-slate-300">
+      Historial de detecciones
+    </h2>
+    <button
+      id="btn-limpiar"
+      class="px-4 py-1.5 rounded-lg text-sm"
+      style="background: #450a0a; color: #f87171; border: 1px solid #7f1d1d"
+    >
+      Limpiar historial
+    </button>
+  </div>
+
+  {% if historial %}
+  <div style="overflow-x: auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr
+          class="text-xs text-slate-500 border-b"
+          style="border-color: #2d3348"
+        >
+          <th class="text-left pb-2">Fecha y hora</th>
+          <th class="text-left pb-2">Sena</th>
+          <th class="text-right pb-2">Confianza</th>
+          <th class="text-right pb-2">Telegram</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-historial">
+        {% for r in historial %}
+        <tr class="border-b" style="border-color: #1e2535">
+          <td class="py-1.5 text-slate-500">{{ r.timestamp }}</td>
+          <td class="font-medium" style="color: #4ade80">{{ r.sena }}</td>
+          <td class="text-right text-slate-400">
+            {{ (r.confianza * 100)|int }}%
+          </td>
+          <td class="text-right">
+            {% if r.enviado_telegram %}
+            <span class="badge badge-green">enviado</span>
+            {% else %}
+            <span class="badge" style="background: #1e2535; color: #64748b"
+              >no</span
+            >
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-slate-600">No hay historial registrado.</p>
+  {% endif %}
+</div>
+
+<script>
+  // Guardar configuracion via AJAX
+  document
+    .getElementById("form-config")
+    .addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("msg-config");
+
+      const payload = {
+        umbral_confianza:
+          parseInt(document.getElementById("umbral").value) / 100,
+        telegram_activo: document.getElementById("telegram_activo").checked,
+        telegram_chat_id: document
+          .getElementById("telegram_chat_id")
+          .value.trim(),
+        formato_mensaje: document.getElementById("formato_mensaje").value,
+        historial_habilitado: document.getElementById("historial_habilitado")
+          .checked,
+      };
+
+      try {
+        const res = await fetch("/admin/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).then((r) => r.json());
+
+        msg.textContent = res.mensaje;
+        msg.style.color = res.exito ? "#4ade80" : "#f87171";
+      } catch (e) {
+        msg.textContent = "Error al guardar.";
+        msg.style.color = "#f87171";
+      }
+    });
+
+  // Limpiar historial
+  document.getElementById("btn-limpiar").addEventListener("click", async () => {
+    if (!confirm("¿Seguro que quieres limpiar todo el historial?")) return;
+    const res = await fetch("/admin/limpiar_historial", {
+      method: "POST",
+    }).then((r) => r.json());
+    if (res.exito) {
+      document.getElementById("tabla-historial") &&
+        (document.getElementById("tabla-historial").innerHTML =
+          "<tr><td colspan='4' class='text-slate-600 text-xs py-2'>Historial limpiado.</td></tr>");
+    }
+  });
+</script>
+{% endblock %}
