@@ -269,6 +269,47 @@
       </div>
     </div>
 
+    <!-- TAB: Modelo -->
+    <div v-show="tabActiva === 'modelo'" class="card">
+      <h2 class="seccion-titulo">Informacion del modelo entrenado</h2>
+      <hr class="separador" />
+
+      <div
+        v-if="!reporteModelo.disponible"
+        style="color: var(--texto-suave); font-size: 14px; padding: 16px 0"
+      >
+        No hay modelo entrenado todavia. Ejecuta el script de entrenamiento
+        primero:
+        <br /><br />
+        <code
+          style="
+            background: #1a1d2a;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+          "
+        >
+          python scripts/entrenar_modelo.py
+        </code>
+      </div>
+
+      <div v-else>
+        <pre
+          style="
+            background: #1a1d2a;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            color: #c8d0e0;
+          "
+          >{{ reporteModelo.reporte }}</pre
+        >
+      </div>
+    </div>
+
     <!-- Toast -->
     <Transition name="toast">
       <div v-if="toast.visible" class="toast" :class="toast.tipo">
@@ -285,6 +326,7 @@ const tabs = [
   { id: "config", label: "Configuracion" },
   { id: "metricas", label: "Metricas" },
   { id: "historial", label: "Historial" },
+  { id: "modelo", label: "Modelo" },
 ];
 
 const tabActiva = ref("config");
@@ -308,6 +350,8 @@ const resumen = ref({
 });
 
 const historial = ref([]);
+
+const reporteModelo = ref({ disponible: false, reporte: null });
 
 function mostrarToast(texto, tipo = "exito") {
   toast.value = { visible: true, texto, tipo };
@@ -390,9 +434,21 @@ async function limpiarHistorial() {
   }
 }
 
+async function cargarModeloInfo() {
+  try {
+    const res = await fetch("/admin/modelo_info");
+    if (res.ok) {
+      reporteModelo.value = await res.json();
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
 onMounted(() => {
   cargarDatos();
   cargarHistorial();
+  cargarModeloInfo();
 });
 </script>
 
