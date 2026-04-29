@@ -2,7 +2,6 @@
   <div class="layout">
     <nav class="navbar">
       <div class="navbar__marca">
-        <span class="navbar__icon">✋</span>
         <span class="navbar__titulo">HandTalk AI</span>
         <span class="badge badge-gris" style="margin-left: 8px; font-size: 11px"
           >LENSEGUA</span
@@ -60,10 +59,6 @@ import { RouterLink, RouterView } from "vue-router";
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.navbar__icon {
-  font-size: 22px;
 }
 
 .navbar__titulo {
