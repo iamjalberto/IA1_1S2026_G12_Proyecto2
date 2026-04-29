@@ -76,6 +76,19 @@ def inicializar_csv(ruta_csv: str) -> None:
         print(f"Dataset creado en: {ruta_csv}")
 
 
+def detectar_camaras() -> list:
+    """Prueba indices 0-9 y retorna los que tienen camara funcional."""
+    disponibles = []
+    for i in range(10):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                disponibles.append(i)
+        cap.release()
+    return disponibles
+
+
 def main():
     inicializar_csv(RUTA_CSV)
 
@@ -83,7 +96,14 @@ def main():
     capturando = False
     frames_capturados = 0
 
-    cap = cv2.VideoCapture(0)
+    # Detectar camaras disponibles y arrancar en la primera
+    camaras = detectar_camaras()
+    if not camaras:
+        print("ERROR: No se encontro ninguna camara disponible.")
+        sys.exit(1)
+    indice_cam = camaras[0]
+
+    cap = cv2.VideoCapture(indice_cam)
     if not cap.isOpened():
         print("ERROR: No se pudo acceder a la camara.")
         sys.exit(1)
@@ -92,10 +112,11 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     print("\n=== Recoleccion de Dataset - HandTalk AI ===")
+    print(f"Camaras disponibles: {camaras}")
     print("Clases disponibles:")
     for i, c in enumerate(CLASES):
         print(f"  [{i}] {c}")
-    print("\nSelecciona clase con [0-9], inicia con ESPACIO, sale con Q\n")
+    print("\nSelecciona clase con [0-9], inicia con ESPACIO, C para cambiar camara, Q para salir\n")
 
     with mp_manos.Hands(
         max_num_hands=1,
@@ -131,24 +152,39 @@ def main():
                         print(f"  Clase '{CLASES[clase_actual]}': {frames_capturados} muestras guardadas.")
                     break
 
-            # Panel de informacion en la esquina superior izquierda
-            cv2.rectangle(frame, (0, 0), (360, 215), (15, 15, 15), -1)
-            cv2.putText(frame, f"Clase: {CLASES[clase_actual]}", (8, 28),
+            h_f, w_f = frame.shape[:2]
+
+            # Barra superior con titulo y boton de camara
+            cv2.rectangle(frame, (0, 0), (w_f, 44), (12, 12, 22), -1)
+            cv2.putText(frame, "HandTalk AI  |  Captura de Dataset  |  LENSEGUA",
+                        (10, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (150, 150, 160), 1)
+
+            # Boton visual de camara en la esquina superior derecha
+            color_btn = (30, 100, 30) if len(camaras) > 1 else (40, 40, 40)
+            cv2.rectangle(frame, (w_f - 160, 4), (w_f - 4, 40), color_btn, -1)
+            cv2.rectangle(frame, (w_f - 160, 4), (w_f - 4, 40), (80, 180, 80), 1)
+            cam_btn_txt = f"CAM {indice_cam}  [C] cambiar"
+            cv2.putText(frame, cam_btn_txt, (w_f - 154, 28),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.48, (180, 255, 180), 1)
+
+            # Panel lateral de informacion (debajo de la barra)
+            cv2.rectangle(frame, (0, 44), (310, 248), (15, 15, 15), -1)
+            cv2.putText(frame, f"Clase: {CLASES[clase_actual]}", (8, 72),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 230, 255), 2)
             cv2.putText(frame, f"Muestras: {conteo[CLASES[clase_actual]]}",
-                        (8, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 220, 50), 2)
+                        (8, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 220, 50), 2)
 
             if capturando:
                 # Borde verde cuando esta capturando
-                cv2.rectangle(frame, (0, 0), (frame.shape[1] - 1, frame.shape[0] - 1), (0, 220, 50), 4)
+                cv2.rectangle(frame, (2, 2), (w_f - 2, h_f - 2), (0, 220, 50), 4)
                 cv2.putText(frame, f"GRABANDO {frames_capturados}/{MUESTRAS_POR_CLASE}",
-                            (8, 88), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 50), 2)
+                            (8, 126), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 50), 2)
             else:
                 cv2.putText(frame, "ESPACIO: capturar  Q: salir",
-                            (8, 88), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160, 160, 160), 1)
+                            (8, 126), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (160, 160, 160), 1)
 
             # Lista de clases con contador
-            y = 110
+            y = 146
             for i, clase in enumerate(CLASES):
                 color = (0, 230, 255) if i == clase_actual else (120, 120, 120)
                 cv2.putText(frame, f"[{i}] {clase}: {conteo[clase]}",
@@ -167,6 +203,15 @@ def main():
                     clase_actual = idx
                     capturando = False
                     frames_capturados = 0
+            elif tecla == ord("c") and len(camaras) > 1 and not capturando:
+                # Ciclar a la siguiente camara disponible
+                pos_actual = camaras.index(indice_cam)
+                indice_cam = camaras[(pos_actual + 1) % len(camaras)]
+                cap.release()
+                cap = cv2.VideoCapture(indice_cam)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                print(f"Camara cambiada a: {indice_cam}")
             elif tecla == ord(" ") and not capturando:
                 capturando = True
                 frames_capturados = 0
