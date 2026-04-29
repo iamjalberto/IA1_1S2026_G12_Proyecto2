@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.config.settings import cargar_config, guardar_config
 from app.services import metricas, predictor
+import os
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -56,3 +57,21 @@ def ver_historial():
 def limpiar():
     metricas.limpiar_historial()
     return jsonify({"exito": True, "mensaje": "Historial limpiado"})
+
+
+@admin_bp.route("/modelo_info")
+def modelo_info():
+    """Retorna el reporte de metricas del modelo entrenado si existe."""
+    ruta_reporte = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "modelo", "reporte_metricas.txt")
+    )
+
+    if not predictor.modelo_disponible():
+        return jsonify({"disponible": False, "reporte": None})
+
+    reporte_texto = None
+    if os.path.exists(ruta_reporte):
+        with open(ruta_reporte, "r", encoding="utf-8") as f:
+            reporte_texto = f.read()
+
+    return jsonify({"disponible": True, "reporte": reporte_texto})
