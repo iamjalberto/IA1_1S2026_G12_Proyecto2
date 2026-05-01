@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import cv2
@@ -18,17 +19,29 @@ _estado = {
 _estado_lock = threading.Lock()
 _hilo_activo = False
 
+# Indice de camara configurable por variable de entorno (default 0)
+# En GCP no hay camara: el hilo simplemente no enviara frames
+CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))
+
 
 def _hilo_camara():
     """
     Corre en un hilo daemon independiente: lee la camara, procesa con MediaPipe
     y actualiza el estado global con el ultimo frame y prediccion.
+    Si no hay camara disponible (entorno cloud), el hilo termina sin errores.
     """
     global _hilo_activo
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(CAMERA_INDEX)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    if not cap.isOpened():
+        # Sin camara (servidor cloud) — no hay stream, pero el resto del sistema funciona
+        print(f"[INFO] Camara {CAMERA_INDEX} no disponible. El stream de video estara inactivo.")
+        _hilo_activo = False
+        cap.release()
+        return
 
     while _hilo_activo:
         ret, frame = cap.read()
