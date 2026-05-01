@@ -19,8 +19,16 @@ import numpy as np
 
 # Las 10 senas de LENSEGUA que vamos a reconocer
 CLASES = [
-    "hola", "gracias", "si", "no", "ayuda",
-    "agua", "bien", "mal", "por_favor", "casa"
+    "hola",      # mano extendida, palma al frente, dedos ligeramente abiertos
+    "si",        # pulgar arriba
+    "no",        # pulgar abajo
+    "tu",        # indice apuntando hacia la camara
+    "yo",        # indice apuntando al propio pecho
+    "excelente", # signo clasico de excelente
+    "te_amo",    # pulgar, indice y menique extendidos (ILY)
+    "igual",     # V inclinada horizontalmente
+    "nombre",    # letra N en LENSEGUA
+    "mucho",     # dedos juntos en punta
 ]
 
 # Cuantas muestras capturar por clase en cada sesion de grabacion

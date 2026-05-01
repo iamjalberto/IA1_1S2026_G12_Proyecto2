@@ -6,16 +6,16 @@ export interface Env {
 
 // Las senas que el sistema HandTalk AI puede reconocer
 const SENAS_DISPONIBLES = [
-  "hola",
-  "gracias",
-  "si",
-  "no",
-  "ayuda",
-  "agua",
-  "bien",
-  "mal",
-  "por_favor",
-  "casa",
+  "hola     - mano extendida, palma al frente",
+  "si       - pulgar arriba",
+  "no       - pulgar abajo",
+  "tu       - indice apuntando hacia el frente",
+  "yo       - indice apuntando al pecho propio",
+  "excelente- signo clasico de excelente",
+  "te_amo   - pulgar, indice y menique extendidos",
+  "igual    - V inclinada horizontalmente",
+  "nombre   - letra N en LENSEGUA",
+  "mucho    - dedos juntos en punta",
 ];
 
 // Se crea el bot con todos los handlers cada vez que llega una peticion.

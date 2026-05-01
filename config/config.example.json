@@ -1,0 +1,20 @@
+{
+  "umbral_confianza": 0.7,
+  "senas_disponibles": [
+    "hola",
+    "si",
+    "no",
+    "tu",
+    "yo",
+    "excelente",
+    "te_amo",
+    "igual",
+    "nombre",
+    "mucho"
+  ],
+  "formato_mensaje": "Deteccion HandTalk AI:\nSena: {sena}\nConfianza: {confianza:.0%}",
+  "telegram_activo": false,
+  "telegram_chat_id": "",
+  "historial_habilitado": true,
+  "max_historial": 200
+}
