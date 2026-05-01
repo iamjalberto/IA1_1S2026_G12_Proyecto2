@@ -133,10 +133,19 @@ def modelo_info():
 # Estado global del proceso de entrenamiento para poder consultarlo con polling
 _estado_entrenamiento = {
     "en_proceso": False,
-    "exito": None,     # True/False cuando termina, None mientras corre
+    "exito": None,       # True/False cuando termina, None mientras corre
     "mensaje": "",
+    "paso": "",          # descripcion del paso actual
+    "progreso": 0.0,     # 0.0 a 1.0
 }
 _lock_entrenamiento = threading.Lock()
+
+
+def _actualizar_paso(paso: str, progreso: float) -> None:
+    """Actualiza el estado del entrenamiento de forma thread-safe."""
+    with _lock_entrenamiento:
+        _estado_entrenamiento["paso"] = paso
+        _estado_entrenamiento["progreso"] = progreso
 
 
 def _ejecutar_entrenamiento():
@@ -165,6 +174,7 @@ def _ejecutar_entrenamiento():
         if not os.path.exists(ruta_csv):
             raise FileNotFoundError("No se encontro dataset.csv. Captura muestras primero.")
 
+        _actualizar_paso("Cargando dataset...", 0.05)
         X, y = [], []
         with open(ruta_csv, "r") as f:
             reader = csv.reader(f)
@@ -182,6 +192,7 @@ def _ejecutar_entrenamiento():
         if len(clases_unicas) < 2:
             raise ValueError("Se necesitan al menos 2 clases distintas para entrenar.")
 
+        _actualizar_paso(f"Dataset listo: {len(X)} muestras, {len(clases_unicas)} clases. Preparando datos...", 0.10)
         encoder = LabelEncoder()
         y_enc = encoder.fit_transform(y)
 
@@ -198,8 +209,12 @@ def _ejecutar_entrenamiento():
             ),
         }
 
+        # Cada modelo ocupa un tramo de 0.15 a 0.80 del progreso total
         resultados = {}
-        for nombre, modelo in candidatos.items():
+        n_modelos = len(candidatos)
+        for i, (nombre, modelo) in enumerate(candidatos.items()):
+            progreso_inicio = 0.15 + i * (0.65 / n_modelos)
+            _actualizar_paso(f"Entrenando {nombre}... ({i+1}/{n_modelos})", progreso_inicio)
             modelo.fit(X_train, y_train)
             preds = modelo.predict(X_test)
             exactitud = accuracy_score(y_test, preds)
@@ -207,10 +222,15 @@ def _ejecutar_entrenamiento():
                 y_test, preds, target_names=encoder.classes_, zero_division=0
             )
             resultados[nombre] = (exactitud, modelo, reporte)
+            _actualizar_paso(
+                f"{nombre} listo — exactitud: {exactitud:.1%}",
+                progreso_inicio + (0.65 / n_modelos) * 0.9,
+            )
 
         mejor_nombre = max(resultados, key=lambda n: resultados[n][0])
         mejor_exactitud, mejor_modelo, mejor_reporte = resultados[mejor_nombre]
 
+        _actualizar_paso(f"Guardando modelo ({mejor_nombre})...", 0.88)
         os.makedirs(ruta_modelo_dir, exist_ok=True)
         with open(os.path.join(ruta_modelo_dir, "model.pkl"), "wb") as f:
             pickle.dump(mejor_modelo, f)
@@ -238,11 +258,14 @@ def _ejecutar_entrenamiento():
             f.write(reporte_completo)
 
         # Recargar el modelo en el predictor activo sin necesidad de reiniciar Flask
+        _actualizar_paso("Recargando modelo en el servidor...", 0.97)
         predictor.recargar_modelo()
 
         with _lock_entrenamiento:
             _estado_entrenamiento["en_proceso"] = False
             _estado_entrenamiento["exito"] = True
+            _estado_entrenamiento["paso"] = "Completado"
+            _estado_entrenamiento["progreso"] = 1.0
             _estado_entrenamiento["mensaje"] = (
                 f"Entrenamiento completado. Mejor modelo: {mejor_nombre} "
                 f"({mejor_exactitud:.1%} exactitud) con {len(X)} muestras."
@@ -252,6 +275,8 @@ def _ejecutar_entrenamiento():
         with _lock_entrenamiento:
             _estado_entrenamiento["en_proceso"] = False
             _estado_entrenamiento["exito"] = False
+            _estado_entrenamiento["paso"] = "Error"
+            _estado_entrenamiento["progreso"] = 0.0
             _estado_entrenamiento["mensaje"] = f"Error durante el entrenamiento: {str(e)}"
 
 
@@ -265,6 +290,8 @@ def entrenar():
         _estado_entrenamiento["en_proceso"] = True
         _estado_entrenamiento["exito"] = None
         _estado_entrenamiento["mensaje"] = "Entrenando..."
+        _estado_entrenamiento["paso"] = "Iniciando..."
+        _estado_entrenamiento["progreso"] = 0.0
 
     hilo = threading.Thread(target=_ejecutar_entrenamiento, daemon=True)
     hilo.start()

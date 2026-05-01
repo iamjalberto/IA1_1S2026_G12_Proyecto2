@@ -371,19 +371,51 @@
             {{ entrenando ? "Entrenando..." : "Entrenar modelo" }}
           </button>
 
-          <!-- Barra de progreso indeterminada mientras entrena -->
-          <div
-            v-if="entrenando"
-            style="
-              margin-top: 12px;
-              height: 4px;
-              background: #1a1d2a;
-              border-radius: 2px;
-              overflow: hidden;
-              max-width: 400px;
-            "
-          >
-            <div class="barra-entrenando"></div>
+          <!-- Progreso del entrenamiento -->
+          <div v-if="entrenando" style="margin-top: 14px; max-width: 440px">
+            <!-- Texto del paso actual -->
+            <p
+              style="
+                font-size: 12px;
+                color: var(--texto-suave);
+                margin: 0 0 6px;
+              "
+            >
+              {{ pasoEntrenamiento || "Iniciando..." }}
+            </p>
+            <!-- Barra determinada cuando hay progreso, indeterminada al inicio -->
+            <div
+              style="
+                height: 6px;
+                background: #1a1d2a;
+                border-radius: 3px;
+                overflow: hidden;
+              "
+            >
+              <div
+                v-if="progresoEntrenamiento > 0"
+                :style="{
+                  height: '100%',
+                  width: (progresoEntrenamiento * 100).toFixed(1) + '%',
+                  background: 'linear-gradient(90deg, #00b4d8, #00cc88)',
+                  borderRadius: '3px',
+                  transition: 'width 0.4s ease',
+                }"
+              ></div>
+              <div v-else class="barra-entrenando"></div>
+            </div>
+            <!-- Porcentaje numerico -->
+            <p
+              v-if="progresoEntrenamiento > 0"
+              style="
+                font-size: 11px;
+                color: var(--texto-suave);
+                margin: 4px 0 0;
+                text-align: right;
+              "
+            >
+              {{ (progresoEntrenamiento * 100).toFixed(0) }}%
+            </p>
           </div>
 
           <p
@@ -924,6 +956,8 @@ const reporteModelo = ref({ disponible: false, reporte: null });
 const entrenando = ref(false);
 const mensajeEntrenamiento = ref("");
 const resultadoEntrenamiento = ref(null);
+const pasoEntrenamiento = ref(""); // texto del paso actual (viene del backend)
+const progresoEntrenamiento = ref(0); // 0.0 a 1.0
 let pollingEntrenamiento = null;
 
 function mostrarToast(texto, tipo = "exito") {
@@ -1027,6 +1061,8 @@ async function cargarModeloInfo() {
 async function iniciarEntrenamiento() {
   mensajeEntrenamiento.value = "";
   resultadoEntrenamiento.value = null;
+  pasoEntrenamiento.value = "";
+  progresoEntrenamiento.value = 0;
   entrenando.value = true;
 
   try {
@@ -1040,7 +1076,7 @@ async function iniciarEntrenamiento() {
       entrenando.value = false;
       return;
     }
-    // Polling cada 2 segundos hasta que termine
+    // Polling cada 1.2 segundos para mostrar progreso granular
     pollingEntrenamiento = setInterval(async () => {
       try {
         const r = await fetch("/admin/estado_entrenamiento", {
@@ -1048,6 +1084,9 @@ async function iniciarEntrenamiento() {
         });
         if (r.ok) {
           const estado = await r.json();
+          // Actualizar texto de paso y barra aunque siga en proceso
+          pasoEntrenamiento.value = estado.paso || "";
+          progresoEntrenamiento.value = estado.progreso ?? 0;
           if (!estado.en_proceso) {
             clearInterval(pollingEntrenamiento);
             pollingEntrenamiento = null;
@@ -1066,7 +1105,7 @@ async function iniciarEntrenamiento() {
       } catch {
         // ignorar error de red transitorio
       }
-    }, 2000);
+    }, 1200);
   } catch {
     mensajeEntrenamiento.value = "Error de conexion con el servidor";
     entrenando.value = false;
