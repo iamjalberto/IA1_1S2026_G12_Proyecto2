@@ -18,6 +18,9 @@ def normalizar_landmarks(hand_landmarks) -> list:
     Extrae los 21 landmarks de la mano y los normaliza:
     - Centra en la muneca (landmark 0)
     - Escala por la distancia maxima para que sea invariante al tamano de la mano
+    - Normaliza quiralidad: si el pulgar (landmark 1) queda a la derecha (x1 > 0),
+      invierte todos los x. Asi el modelo recibe siempre la misma orientacion
+      sin importar si se usa mano izquierda, derecha o hay un flip en el frame.
     Retorna una lista plana de 63 valores (21 puntos * 3 coordenadas).
     """
     puntos = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark])
@@ -29,6 +32,11 @@ def normalizar_landmarks(hand_landmarks) -> list:
     distancia_max = np.max(np.abs(puntos))
     if distancia_max > 0:
         puntos /= distancia_max
+
+    # Normalizar quiralidad: forzar que el pulgar siempre quede a la izquierda (x1 < 0).
+    # Esto hace el descriptor invariante a si el frame esta volteado o no.
+    if puntos[1][0] > 0:
+        puntos[:, 0] *= -1
 
     return puntos.flatten().tolist()
 

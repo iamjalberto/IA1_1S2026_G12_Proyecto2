@@ -53,13 +53,11 @@ def _hilo_camara():
             time.sleep(0.05)
             continue
 
-        # El canvas del navegador captura el video CON el CSS transform: scaleX(-1) aplicado
-        # (comportamiento de Chrome: drawImage incluye las transformaciones CSS del elemento).
-        # Eso significa que todos los frames de entrenamiento llegan ya volteados horizontalmente.
-        # Para que los landmarks de inferencia sean consistentes con el dataset, debemos
-        # voltear el frame ANTES de pasarselo a MediaPipe.
-        # El frame_anotado resultante ya queda en orientacion espejo — correcto para el stream.
-        frame_anotado, caracteristicas = detector.procesar_frame(cv2.flip(frame, 1))
+        # La normalizacion de quiralidad en detector.normalizar_landmarks() se encarga
+        # de hacer el descriptor invariante a la orientacion. Procesamos el frame natural
+        # y solo volteamos el anotado para que el usuario vea efecto espejo en el stream.
+        frame_anotado, caracteristicas = detector.procesar_frame(frame)
+        frame_anotado = cv2.flip(frame_anotado, 1)
 
         config = cargar_config()
         umbral = config.get("umbral_confianza", 0.70)

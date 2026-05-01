@@ -1,43 +1,37 @@
 Reporte de Metricas - HandTalk AI
 ==================================================
 
-Mejor modelo: SVM RBF
-Exactitud: 1.0000 (100.0%)
+Modelo: SVM RBF (con normalizacion de quiralidad)
+Exactitud CV 5-fold: 0.9998 (99.98%)
 Muestras totales: 5000
 Clases: ['excelente', 'hola', 'igual', 'mucho', 'no', 'nombre', 'si', 'te_amo', 'tu', 'yo']
 
-Resultados por algoritmo:
-  KNN (k=5): 0.9990
-  SVM RBF: 1.0000
-  Random Forest: 1.0000
-  Regresion Logistica: 0.9990
-
-Reporte detallado (mejor modelo):
+Reporte detallado:
               precision    recall  f1-score   support
 
-   excelente       1.00      1.00      1.00       100
-        hola       1.00      1.00      1.00       100
-       igual       1.00      1.00      1.00       100
-       mucho       1.00      1.00      1.00       100
-          no       1.00      1.00      1.00       100
-      nombre       1.00      1.00      1.00       100
-          si       1.00      1.00      1.00       100
-      te_amo       1.00      1.00      1.00       100
-          tu       1.00      1.00      1.00       100
-          yo       1.00      1.00      1.00       100
+   excelente       1.00      1.00      1.00       500
+        hola       1.00      1.00      1.00       500
+       igual       1.00      1.00      1.00       500
+       mucho       1.00      1.00      1.00       500
+          no       1.00      1.00      1.00       500
+      nombre       1.00      1.00      1.00       500
+          si       1.00      1.00      1.00       500
+      te_amo       1.00      1.00      1.00       500
+          tu       1.00      1.00      1.00       500
+          yo       1.00      1.00      1.00       500
 
-    accuracy                           1.00      1000
-   macro avg       1.00      1.00      1.00      1000
-weighted avg       1.00      1.00      1.00      1000
+    accuracy                           1.00      5000
+   macro avg       1.00      1.00      1.00      5000
+weighted avg       1.00      1.00      1.00      5000
 
 Matriz de confusion:
-[[100   0   0   0   0   0   0   0   0   0]
- [  0 100   0   0   0   0   0   0   0   0]
- [  0   0 100   0   0   0   0   0   0   0]
- [  0   0   0 100   0   0   0   0   0   0]
- [  0   0   0   0 100   0   0   0   0   0]
- [  0   0   0   0   0 100   0   0   0   0]
- [  0   0   0   0   0   0 100   0   0   0]
- [  0   0   0   0   0   0   0 100   0   0]
- [  0   0   0   0   0   0   0   0 100   0]
- [  0   0   0   0   0   0   0   0   0 100]]
+[[500   0   0   0   0   0   0   0   0   0]
+ [  0 499   0   0   0   0   0   0   1   0]
+ [  0   0 500   0   0   0   0   0   0   0]
+ [  0   0   0 500   0   0   0   0   0   0]
+ [  0   0   0   0 500   0   0   0   0   0]
+ [  0   0   0   0   0 500   0   0   0   0]
+ [  0   0   0   0   0   0 500   0   0   0]
+ [  0   0   0   0   0   0   0 500   0   0]
+ [  0   0   0   0   0   0   0   0 500   0]
+ [  0   0   0   0   0   0   0   0   0 500]]

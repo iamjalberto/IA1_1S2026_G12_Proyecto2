@@ -65,12 +65,20 @@ RUTA_CSV = os.path.normpath(
 
 
 def _normalizar_landmarks(hand_landmarks) -> list:
-    """Misma normalizacion que usa el script local de captura."""
+    """
+    Misma normalizacion que usa detector.py en inferencia.
+    Incluye normalizacion de quiralidad: si el pulgar (x1) queda a la derecha,
+    se invierten todos los x para que el descriptor sea independiente de la
+    orientacion del frame y de cual mano muestra el usuario.
+    """
     puntos = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark])
     puntos -= puntos[0]
     distancia_max = np.max(np.abs(puntos))
     if distancia_max > 0:
         puntos /= distancia_max
+    # Normalizar quiralidad igual que en detector.py
+    if puntos[1][0] > 0:
+        puntos[:, 0] *= -1
     return puntos.flatten().tolist()
 
 
