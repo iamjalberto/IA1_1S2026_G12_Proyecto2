@@ -1,5 +1,10 @@
+import csv
 import os
+import pickle
+import threading
 from functools import wraps
+
+import numpy as np
 from flask import Blueprint, request, jsonify, session
 from app.config.settings import cargar_config, guardar_config
 from app.services import metricas, predictor
@@ -121,6 +126,158 @@ def modelo_info():
             reporte_texto = f.read()
 
     return jsonify({"disponible": True, "reporte": reporte_texto})
+
+
+# --- Entrenamiento del modelo desde el panel ---
+
+# Estado global del proceso de entrenamiento para poder consultarlo con polling
+_estado_entrenamiento = {
+    "en_proceso": False,
+    "exito": None,     # True/False cuando termina, None mientras corre
+    "mensaje": "",
+}
+_lock_entrenamiento = threading.Lock()
+
+
+def _ejecutar_entrenamiento():
+    """
+    Corre el entrenamiento en un hilo separado para no bloquear Flask.
+    Prueba KNN, SVM, Random Forest y Regresion Logistica, guarda el mejor.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+    from sklearn.model_selection import train_test_split
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.preprocessing import LabelEncoder
+    from sklearn.svm import SVC
+
+    global _estado_entrenamiento
+
+    ruta_csv = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "dataset", "dataset.csv")
+    )
+    ruta_modelo_dir = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "modelo")
+    )
+
+    try:
+        if not os.path.exists(ruta_csv):
+            raise FileNotFoundError("No se encontro dataset.csv. Captura muestras primero.")
+
+        X, y = [], []
+        with open(ruta_csv, "r") as f:
+            reader = csv.reader(f)
+            next(reader)
+            for fila in reader:
+                if len(fila) >= 2:
+                    y.append(fila[0])
+                    X.append([float(v) for v in fila[1:]])
+
+        X, y = np.array(X), np.array(y)
+        clases_unicas = sorted(set(y))
+
+        if len(X) < 10:
+            raise ValueError(f"Se necesitan al menos 10 muestras (hay {len(X)}).")
+        if len(clases_unicas) < 2:
+            raise ValueError("Se necesitan al menos 2 clases distintas para entrenar.")
+
+        encoder = LabelEncoder()
+        y_enc = encoder.fit_transform(y)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y_enc, test_size=0.20, random_state=42, stratify=y_enc
+        )
+
+        candidatos = {
+            "KNN (k=5)": KNeighborsClassifier(n_neighbors=5),
+            "SVM RBF": SVC(kernel="rbf", probability=True, C=10, random_state=42),
+            "Random Forest": RandomForestClassifier(n_estimators=150, random_state=42),
+            "Regresion Logistica": LogisticRegression(
+                max_iter=1000, C=1.0, random_state=42, multi_class="auto"
+            ),
+        }
+
+        resultados = {}
+        for nombre, modelo in candidatos.items():
+            modelo.fit(X_train, y_train)
+            preds = modelo.predict(X_test)
+            exactitud = accuracy_score(y_test, preds)
+            reporte = classification_report(
+                y_test, preds, target_names=encoder.classes_, zero_division=0
+            )
+            resultados[nombre] = (exactitud, modelo, reporte)
+
+        mejor_nombre = max(resultados, key=lambda n: resultados[n][0])
+        mejor_exactitud, mejor_modelo, mejor_reporte = resultados[mejor_nombre]
+
+        os.makedirs(ruta_modelo_dir, exist_ok=True)
+        with open(os.path.join(ruta_modelo_dir, "model.pkl"), "wb") as f:
+            pickle.dump(mejor_modelo, f)
+        with open(os.path.join(ruta_modelo_dir, "label_encoder.pkl"), "wb") as f:
+            pickle.dump(encoder, f)
+
+        preds_finales = mejor_modelo.predict(X_test)
+        matriz = confusion_matrix(y_test, preds_finales)
+
+        resumen_algoritmos = "\n".join(
+            f"  {n}: {resultados[n][0]:.4f}" for n in resultados
+        )
+        reporte_completo = (
+            f"Reporte de Metricas - HandTalk AI\n{'='*50}\n\n"
+            f"Mejor modelo: {mejor_nombre}\n"
+            f"Exactitud: {mejor_exactitud:.4f} ({mejor_exactitud:.1%})\n"
+            f"Muestras totales: {len(X)}\n"
+            f"Clases: {clases_unicas}\n\n"
+            f"Resultados por algoritmo:\n{resumen_algoritmos}\n\n"
+            f"Reporte detallado (mejor modelo):\n{mejor_reporte}\n"
+            f"Matriz de confusion:\n{matriz}\n"
+        )
+
+        with open(os.path.join(ruta_modelo_dir, "reporte_metricas.txt"), "w", encoding="utf-8") as f:
+            f.write(reporte_completo)
+
+        # Recargar el modelo en el predictor activo sin necesidad de reiniciar Flask
+        predictor.recargar_modelo()
+
+        with _lock_entrenamiento:
+            _estado_entrenamiento["en_proceso"] = False
+            _estado_entrenamiento["exito"] = True
+            _estado_entrenamiento["mensaje"] = (
+                f"Entrenamiento completado. Mejor modelo: {mejor_nombre} "
+                f"({mejor_exactitud:.1%} exactitud) con {len(X)} muestras."
+            )
+
+    except Exception as e:
+        with _lock_entrenamiento:
+            _estado_entrenamiento["en_proceso"] = False
+            _estado_entrenamiento["exito"] = False
+            _estado_entrenamiento["mensaje"] = f"Error durante el entrenamiento: {str(e)}"
+
+
+@admin_bp.route("/entrenar", methods=["POST"])
+@requiere_login
+def entrenar():
+    """Lanza el entrenamiento del modelo en un hilo de fondo."""
+    with _lock_entrenamiento:
+        if _estado_entrenamiento["en_proceso"]:
+            return jsonify({"iniciado": False, "mensaje": "Ya hay un entrenamiento en curso."})
+        _estado_entrenamiento["en_proceso"] = True
+        _estado_entrenamiento["exito"] = None
+        _estado_entrenamiento["mensaje"] = "Entrenando..."
+
+    hilo = threading.Thread(target=_ejecutar_entrenamiento, daemon=True)
+    hilo.start()
+    return jsonify({"iniciado": True, "mensaje": "Entrenamiento iniciado."})
+
+
+@admin_bp.route("/estado_entrenamiento", methods=["GET"])
+@requiere_login
+def estado_entrenamiento():
+    """Permite al frontend consultar si el entrenamiento termino y con que resultado."""
+    with _lock_entrenamiento:
+        estado = dict(_estado_entrenamiento)
+    return jsonify(estado)
 
 
 # --- CRUD de señas disponibles ---

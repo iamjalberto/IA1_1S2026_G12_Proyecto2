@@ -346,26 +346,66 @@
 
       <!-- TAB: Modelo -->
       <div v-show="tabActiva === 'modelo'" class="card">
-        <h2 class="seccion-titulo">Informacion del modelo entrenado</h2>
+        <h2 class="seccion-titulo">Entrenamiento y modelo</h2>
         <hr class="separador" />
 
+        <!-- Boton de entrenamiento -->
+        <div style="margin-bottom: 24px">
+          <p
+            style="
+              font-size: 14px;
+              color: var(--texto-suave);
+              margin-bottom: 12px;
+            "
+          >
+            Entrena el clasificador con todas las muestras del dataset. Se
+            prueban KNN, SVM, Random Forest y Regresion Logistica — se guarda el
+            de mayor exactitud.
+          </p>
+          <button
+            class="btn btn--primario"
+            @click="iniciarEntrenamiento"
+            :disabled="entrenando"
+            style="min-width: 200px"
+          >
+            {{ entrenando ? "Entrenando..." : "Entrenar modelo" }}
+          </button>
+
+          <!-- Barra de progreso indeterminada mientras entrena -->
+          <div
+            v-if="entrenando"
+            style="
+              margin-top: 12px;
+              height: 4px;
+              background: #1a1d2a;
+              border-radius: 2px;
+              overflow: hidden;
+              max-width: 400px;
+            "
+          >
+            <div class="barra-entrenando"></div>
+          </div>
+
+          <p
+            v-if="mensajeEntrenamiento"
+            :style="{
+              marginTop: '10px',
+              fontSize: '13px',
+              color: resultadoEntrenamiento === false ? '#e05252' : '#00cc88',
+            }"
+          >
+            {{ mensajeEntrenamiento }}
+          </p>
+        </div>
+
+        <hr class="separador" />
+
+        <!-- Reporte del modelo actual -->
         <div
           v-if="!reporteModelo.disponible"
           style="color: var(--texto-suave); font-size: 14px; padding: 16px 0"
         >
-          No hay modelo entrenado todavia. Ejecuta el script de entrenamiento
-          primero:
-          <br /><br />
-          <code
-            style="
-              background: #1a1d2a;
-              padding: 6px 12px;
-              border-radius: 6px;
-              font-size: 13px;
-            "
-          >
-            python scripts/entrenar_modelo.py
-          </code>
+          No hay modelo entrenado todavia. Usa el boton de arriba para entrenar.
         </div>
 
         <div v-else>
@@ -677,6 +717,12 @@ const historial = ref([]);
 
 const reporteModelo = ref({ disponible: false, reporte: null });
 
+// Estado del entrenamiento
+const entrenando = ref(false);
+const mensajeEntrenamiento = ref("");
+const resultadoEntrenamiento = ref(null);
+let pollingEntrenamiento = null;
+
 function mostrarToast(texto, tipo = "exito") {
   toast.value = { visible: true, texto, tipo };
   setTimeout(() => {
@@ -772,6 +818,55 @@ async function cargarModeloInfo() {
     }
   } catch {
     /* sin conexion */
+  }
+}
+
+async function iniciarEntrenamiento() {
+  mensajeEntrenamiento.value = "";
+  resultadoEntrenamiento.value = null;
+  entrenando.value = true;
+
+  try {
+    const res = await fetch("/admin/entrenar", {
+      method: "POST",
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (!data.iniciado) {
+      mensajeEntrenamiento.value = data.mensaje;
+      entrenando.value = false;
+      return;
+    }
+    // Polling cada 2 segundos hasta que termine
+    pollingEntrenamiento = setInterval(async () => {
+      try {
+        const r = await fetch("/admin/estado_entrenamiento", {
+          credentials: "include",
+        });
+        if (r.ok) {
+          const estado = await r.json();
+          if (!estado.en_proceso) {
+            clearInterval(pollingEntrenamiento);
+            pollingEntrenamiento = null;
+            entrenando.value = false;
+            resultadoEntrenamiento.value = estado.exito;
+            mensajeEntrenamiento.value = estado.mensaje;
+            if (estado.exito) {
+              // Recargar el reporte para mostrar las nuevas metricas
+              await cargarModeloInfo();
+              mostrarToast("Modelo entrenado correctamente", "exito");
+            } else {
+              mostrarToast(estado.mensaje, "error");
+            }
+          }
+        }
+      } catch {
+        // ignorar error de red transitorio
+      }
+    }, 2000);
+  } catch {
+    mensajeEntrenamiento.value = "Error de conexion con el servidor";
+    entrenando.value = false;
   }
 }
 
@@ -1188,5 +1283,21 @@ onMounted(async () => {
 .toast-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+/* Barra de progreso indeterminada durante el entrenamiento */
+@keyframes barra-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+.barra-entrenando {
+  width: 25%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #0df, transparent);
+  animation: barra-slide 1.4s ease-in-out infinite;
 }
 </style>

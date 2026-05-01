@@ -59,3 +59,15 @@ def predecir(caracteristicas: list) -> tuple:
 
     etiqueta = _encoder.inverse_transform([idx])[0]
     return etiqueta, confianza
+
+
+def recargar_modelo() -> bool:
+    """
+    Fuerza la recarga del modelo desde disco.
+    Se llama despues de un reentrenamiento para que el predictor use el nuevo modelo
+    sin necesidad de reiniciar Flask.
+    """
+    global _modelo, _encoder
+    _modelo = None
+    _encoder = None
+    return _cargar_modelos()
