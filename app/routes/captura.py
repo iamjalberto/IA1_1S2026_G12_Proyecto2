@@ -32,6 +32,12 @@ captura_bp = Blueprint("captura", __name__)
 _mp_manos_mod = mp.solutions.hands
 _mp_dibujo = mp.solutions.drawing_utils
 _mp_estilos = mp.solutions.drawing_styles
+# Estilos compactos para frames de 320x240: radio y grosor reducidos
+# para que los landmarks no luzcan gigantes en resolucion baja
+_estilo_puntos = _mp_dibujo.DrawingSpec(
+    color=(0, 230, 255), thickness=cv2.FILLED, circle_radius=2
+)
+_estilo_conexiones = _mp_dibujo.DrawingSpec(color=(0, 200, 80), thickness=1)
 _detector = _mp_manos_mod.Hands(
     static_image_mode=False,  # modo tracking: mas rapido al procesar frames consecutivos
     max_num_hands=1,
@@ -151,8 +157,8 @@ def capturar_frame():
                 frame_anotado,
                 mano_lm,
                 _mp_manos_mod.HAND_CONNECTIONS,
-                _mp_estilos.get_default_hand_landmarks_style(),
-                _mp_estilos.get_default_hand_connections_style(),
+                _estilo_puntos,
+                _estilo_conexiones,
             )
 
     # Codificar frame anotado como JPEG base64 para el preview del navegador

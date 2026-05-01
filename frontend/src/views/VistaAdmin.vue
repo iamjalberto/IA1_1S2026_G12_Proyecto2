@@ -549,8 +549,6 @@
               justify-content: center;
               padding: 16px;
             "
-            @keydown.esc.window="cerrarCaptura"
-            @keydown.space.window.prevent="toggleCaptura"
           >
             <div
               style="
@@ -888,6 +886,9 @@ let intervalPreview = null;
 let _frameEnVuelo = false;
 let _fpsContador = 0;
 let _fpsInterval = null;
+// Manejador de teclado del modal; se instala con capture=true para
+// dispararse antes de que cualquier boton dentro del modal lo procese
+let _teclaModalHandler = null;
 
 const tabActiva = ref("config");
 const guardando = ref(false);
@@ -1139,6 +1140,8 @@ async function abrirCaptura(sena) {
   deteccionActiva.value = false;
 
   await iniciarStream();
+  // Instalar atajos de teclado una vez que el modal esta listo
+  _instalarAtajosModal();
 }
 
 async function iniciarStream() {
@@ -1196,7 +1199,36 @@ async function listarCamaras() {
   }
 }
 
+function _instalarAtajosModal() {
+  _desinstalarAtajosModal(); // evitar doble registro
+  _teclaModalHandler = (e) => {
+    // No interceptar si el usuario esta escribiendo en un campo de formulario
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cerrarCaptura();
+    } else if (e.key === " ") {
+      // Prevent en fase de captura: impide que cualquier boton enfocado
+      // del modal reciba el espacio antes que nuestro handler
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toggleCaptura();
+    }
+  };
+  window.addEventListener("keydown", _teclaModalHandler, { capture: true });
+}
+
+function _desinstalarAtajosModal() {
+  if (_teclaModalHandler) {
+    window.removeEventListener("keydown", _teclaModalHandler, {
+      capture: true,
+    });
+    _teclaModalHandler = null;
+  }
+}
+
 function cerrarCaptura() {
+  _desinstalarAtajosModal();
   detenerCaptura();
   // Detener tambien el loop de preview
   if (intervalPreview) {
