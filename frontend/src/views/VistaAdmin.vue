@@ -510,148 +510,233 @@
           </div>
         </div>
 
-        <!-- Panel de captura con camara del navegador -->
-        <div
-          v-if="claseCapturando"
-          style="
-            margin-top: 20px;
-            background: #11131f;
-            border: 1px solid #2a2d3e;
-            border-radius: 12px;
-            padding: 20px;
-          "
-        >
+        <!-- Panel de captura — modal overlay -->
+        <Teleport to="body">
           <div
+            v-if="claseCapturando"
             style="
+              position: fixed;
+              inset: 0;
+              background: rgba(0, 0, 0, 0.82);
+              z-index: 1000;
               display: flex;
-              justify-content: space-between;
               align-items: center;
-              margin-bottom: 16px;
+              justify-content: center;
+              padding: 16px;
             "
+            @keydown.esc.window="cerrarCaptura"
           >
-            <h3 style="margin: 0; font-size: 16px">
-              Capturando:
-              <span style="color: #0df">{{ claseCapturando }}</span>
-            </h3>
-            <button
-              class="btn"
-              style="font-size: 12px; padding: 4px 12px"
-              @click="cerrarCaptura"
+            <div
+              style="
+                background: #13151f;
+                border: 1px solid #2a2d3e;
+                border-radius: 16px;
+                padding: 28px;
+                width: 100%;
+                max-width: 700px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+              "
             >
-              Cerrar camara
-            </button>
-          </div>
-
-          <div
-            style="
-              display: flex;
-              gap: 20px;
-              align-items: flex-start;
-              flex-wrap: wrap;
-            "
-          >
-            <!-- Preview de camara -->
-            <div style="position: relative">
-              <video
-                ref="videoRef"
-                autoplay
-                playsinline
-                muted
-                style="
-                  width: 280px;
-                  border-radius: 8px;
-                  background: #000;
-                  display: block;
-                "
-              ></video>
-              <!-- Indicador de deteccion -->
-              <div
-                :style="{
-                  position: 'absolute',
-                  top: '8px',
-                  right: '8px',
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '50%',
-                  background: deteccionActiva ? '#00ee55' : '#555',
-                  boxShadow: deteccionActiva ? '0 0 6px #00ee55' : 'none',
-                  transition: 'background 0.2s',
-                }"
-              ></div>
-            </div>
-
-            <!-- Controles -->
-            <div style="flex: 1; min-width: 180px">
-              <p style="margin: 0 0 4px; font-size: 15px; font-weight: 600">
-                {{ conteoCaptura }} / {{ MUESTRAS_MAX }}
-              </p>
-              <!-- Barra de progreso -->
+              <!-- Header del modal -->
               <div
                 style="
-                  height: 8px;
-                  background: #1a1d2a;
-                  border-radius: 4px;
-                  margin-bottom: 16px;
-                  overflow: hidden;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 20px;
                 "
               >
-                <div
-                  :style="{
-                    width:
-                      Math.min((conteoCaptura / MUESTRAS_MAX) * 100, 100) + '%',
-                    height: '100%',
-                    background: '#0df',
-                    borderRadius: '4px',
-                    transition: 'width 0.2s',
-                  }"
-                ></div>
+                <h3 style="margin: 0; font-size: 18px">
+                  Capturando seña:
+                  <span style="color: #0df">{{ claseCapturando }}</span>
+                </h3>
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <select
+                    v-if="camarasDisponibles.length > 1"
+                    v-model="camaraSeleccionada"
+                    class="input"
+                    style="font-size: 12px; padding: 4px 8px; height: auto"
+                    @change="iniciarStream"
+                  >
+                    <option
+                      v-for="cam in camarasDisponibles"
+                      :key="cam.deviceId"
+                      :value="cam.deviceId"
+                    >
+                      {{ cam.label }}
+                    </option>
+                  </select>
+                  <button
+                    class="btn"
+                    style="font-size: 12px; padding: 4px 12px"
+                    @click="cerrarCaptura"
+                  >
+                    Cerrar (ESC)
+                  </button>
+                </div>
               </div>
 
-              <button
-                v-if="!capturaActiva"
-                class="btn btn--primario"
-                style="width: 100%; margin-bottom: 8px"
-                @click="iniciarCaptura"
-                :disabled="conteoCaptura >= MUESTRAS_MAX"
-              >
-                {{
-                  conteoCaptura >= MUESTRAS_MAX
-                    ? "Completada"
-                    : "Iniciar grabacion"
-                }}
-              </button>
-              <button
-                v-else
-                class="btn"
-                style="width: 100%; margin-bottom: 8px; color: #e0a052"
-                @click="detenerCaptura"
-              >
-                Detener
-              </button>
-
-              <p
-                :style="{
-                  fontSize: '12px',
-                  color: deteccionActiva ? '#0df' : '#666',
-                  margin: 0,
-                }"
-              >
-                {{
-                  deteccionActiva ? "Mano detectada" : "Sin deteccion de mano"
-                }}
-              </p>
-              <p
+              <div
                 style="
-                  font-size: 11px;
-                  color: var(--texto-suave);
-                  margin: 8px 0 0;
+                  display: flex;
+                  gap: 24px;
+                  align-items: flex-start;
+                  flex-wrap: wrap;
                 "
               >
-                Asegurate de tener buena iluminacion y la mano visible.
-              </p>
+                <!-- Preview: muestra el frame anotado del servidor (con landmarks) -->
+                <div style="position: relative; flex-shrink: 0">
+                  <!-- Video oculto: solo sirve para capturar frames al canvas -->
+                  <video
+                    ref="videoRef"
+                    autoplay
+                    playsinline
+                    muted
+                    style="
+                      position: absolute;
+                      opacity: 0;
+                      pointer-events: none;
+                      width: 1px;
+                      height: 1px;
+                    "
+                  ></video>
+                  <!-- Imagen con el frame anotado por el backend (muestra landmarks) -->
+                  <img
+                    v-if="framePreview"
+                    :src="'data:image/jpeg;base64,' + framePreview"
+                    style="
+                      width: 320px;
+                      border-radius: 10px;
+                      display: block;
+                      background: #000;
+                      border: 2px solid;
+                    "
+                    :style="{
+                      borderColor: deteccionActiva ? '#00ee55' : '#2a2d3e',
+                    }"
+                  />
+                  <div
+                    v-else
+                    style="
+                      width: 320px;
+                      height: 240px;
+                      border-radius: 10px;
+                      background: #0a0b14;
+                      border: 2px solid #2a2d3e;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      color: #555;
+                      font-size: 13px;
+                    "
+                  >
+                    Iniciando camara...
+                  </div>
+                  <!-- Indicador de detección -->
+                  <div
+                    style="
+                      position: absolute;
+                      top: 10px;
+                      right: 10px;
+                      display: flex;
+                      align-items: center;
+                      gap: 5px;
+                      background: rgba(0, 0, 0, 0.65);
+                      padding: 3px 8px;
+                      border-radius: 20px;
+                      font-size: 11px;
+                    "
+                  >
+                    <div
+                      :style="{
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '50%',
+                        background: deteccionActiva ? '#00ee55' : '#555',
+                        boxShadow: deteccionActiva ? '0 0 6px #00ee55' : 'none',
+                      }"
+                    ></div>
+                    <span
+                      :style="{ color: deteccionActiva ? '#00ee55' : '#777' }"
+                    >
+                      {{ deteccionActiva ? "Mano detectada" : "Sin mano" }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Controles -->
+                <div style="flex: 1; min-width: 180px">
+                  <p style="margin: 0 0 6px; font-size: 22px; font-weight: 700">
+                    {{ conteoCaptura }}
+                    <span style="font-size: 14px; color: var(--texto-suave)"
+                      >/ {{ MUESTRAS_MAX }}</span
+                    >
+                  </p>
+                  <!-- Barra de progreso -->
+                  <div
+                    style="
+                      height: 8px;
+                      background: #1a1d2a;
+                      border-radius: 4px;
+                      margin-bottom: 20px;
+                      overflow: hidden;
+                    "
+                  >
+                    <div
+                      :style="{
+                        width:
+                          Math.min((conteoCaptura / MUESTRAS_MAX) * 100, 100) +
+                          '%',
+                        height: '100%',
+                        background: '#0df',
+                        borderRadius: '4px',
+                        transition: 'width 0.2s',
+                      }"
+                    ></div>
+                  </div>
+
+                  <button
+                    v-if="!capturaActiva"
+                    class="btn btn--primario"
+                    style="width: 100%; margin-bottom: 10px; padding: 12px"
+                    @click="iniciarCaptura"
+                    :disabled="conteoCaptura >= MUESTRAS_MAX"
+                  >
+                    {{
+                      conteoCaptura >= MUESTRAS_MAX
+                        ? "Completada"
+                        : "Iniciar grabacion"
+                    }}
+                  </button>
+                  <button
+                    v-else
+                    class="btn"
+                    style="
+                      width: 100%;
+                      margin-bottom: 10px;
+                      padding: 12px;
+                      color: #e0a052;
+                    "
+                    @click="detenerCaptura"
+                  >
+                    Detener
+                  </button>
+
+                  <p
+                    style="
+                      font-size: 12px;
+                      color: var(--texto-suave);
+                      margin: 0;
+                    "
+                  >
+                    Coloca la mano en el encuadre y presiona Iniciar.<br />
+                    El borde verde confirma que el servidor detecta tu mano.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </Teleport>
       </div>
 
       <!-- Toast -->
@@ -690,6 +775,9 @@ const claseCapturando = ref(null);
 const capturaActiva = ref(false);
 const conteoCaptura = ref(0);
 const deteccionActiva = ref(false);
+const framePreview = ref(""); // frame anotado con landmarks devuelto por el servidor
+const camarasDisponibles = ref([]); // lista de { deviceId, label }
+const camaraSeleccionada = ref(""); // deviceId activo
 let streamCamara = null;
 let intervalCaptura = null;
 
@@ -941,9 +1029,24 @@ async function abrirCaptura(sena) {
   conteoCaptura.value = progreso.value[sena] ?? 0;
   deteccionActiva.value = false;
 
+  await iniciarStream();
+}
+
+async function iniciarStream() {
+  // Detener stream anterior si existe
+  if (streamCamara) {
+    streamCamara.getTracks().forEach((t) => t.stop());
+    streamCamara = null;
+  }
+  framePreview.value = "";
+
+  const constraints = camaraSeleccionada.value
+    ? { video: { deviceId: { exact: camaraSeleccionada.value } } }
+    : { video: true };
+
   try {
-    streamCamara = await navigator.mediaDevices.getUserMedia({ video: true });
-    // Esperamos al siguiente tick para que el elemento <video> este en el DOM
+    streamCamara = await navigator.mediaDevices.getUserMedia(constraints);
+    await listarCamaras();
     await nextTick();
     if (videoRef.value) {
       videoRef.value.srcObject = streamCamara;
@@ -955,9 +1058,28 @@ async function abrirCaptura(sena) {
   }
 }
 
+async function listarCamaras() {
+  try {
+    const dispositivos = await navigator.mediaDevices.enumerateDevices();
+    camarasDisponibles.value = dispositivos
+      .filter((d) => d.kind === "videoinput")
+      .map((d, i) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Camara ${i + 1}`,
+      }));
+    // Si no hay seleccion y hay camaras, preseleccionar la primera
+    if (!camaraSeleccionada.value && camarasDisponibles.value.length > 0) {
+      camaraSeleccionada.value = camarasDisponibles.value[0].deviceId;
+    }
+  } catch {
+    /* si falla enumerateDevices, no es critico */
+  }
+}
+
 function cerrarCaptura() {
   detenerCaptura();
   claseCapturando.value = null;
+  framePreview.value = "";
   if (streamCamara) {
     streamCamara.getTracks().forEach((t) => t.stop());
     streamCamara = null;
@@ -1006,6 +1128,10 @@ async function enviarFrame() {
     if (res.ok) {
       const data = await res.json();
       deteccionActiva.value = data.detectado;
+      // Actualizar el preview con el frame anotado devuelto por el servidor
+      if (data.preview) {
+        framePreview.value = data.preview;
+      }
       if (data.detectado) {
         conteoCaptura.value = data.count;
         progreso.value[claseCapturando.value] = data.count;

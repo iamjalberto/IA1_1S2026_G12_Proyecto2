@@ -29,8 +29,10 @@ captura_bp = Blueprint("captura", __name__)
 
 # Inicializamos el detector una sola vez al importar el modulo.
 # Crearlo por request tarda ~120ms de overhead, lo que haria imposible capturar a 10fps.
-_mp_manos = mp.solutions.hands
-_detector = _mp_manos.Hands(
+_mp_manos_mod = mp.solutions.hands
+_mp_dibujo = mp.solutions.drawing_utils
+_mp_estilos = mp.solutions.drawing_styles
+_detector = _mp_manos_mod.Hands(
     max_num_hands=1,
     min_detection_confidence=0.7,
     min_tracking_confidence=0.7,
@@ -119,8 +121,25 @@ def capturar_frame():
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     resultado = _detector.process(rgb)
 
-    if not resultado.multi_hand_landmarks:
-        return jsonify({"detectado": False, "count": count_actual})
+    # Dibujar landmarks sobre el frame para devolvérselo al navegador como preview
+    frame_anotado = frame.copy()
+    detectado = bool(resultado.multi_hand_landmarks)
+    if detectado:
+        for mano_lm in resultado.multi_hand_landmarks:
+            _mp_dibujo.draw_landmarks(
+                frame_anotado,
+                mano_lm,
+                _mp_manos_mod.HAND_CONNECTIONS,
+                _mp_estilos.get_default_hand_landmarks_style(),
+                _mp_estilos.get_default_hand_connections_style(),
+            )
+
+    # Codificar frame anotado como JPEG base64 para el preview del navegador
+    ok, buf = cv2.imencode(".jpg", frame_anotado, [cv2.IMWRITE_JPEG_QUALITY, 72])
+    frame_preview = base64.b64encode(buf.tobytes()).decode() if ok else ""
+
+    if not detectado:
+        return jsonify({"detectado": False, "count": count_actual, "preview": frame_preview})
 
     caracteristicas = _normalizar_landmarks(resultado.multi_hand_landmarks[0])
 
@@ -135,6 +154,7 @@ def capturar_frame():
         "detectado": True,
         "count": count_actual,
         "lleno": count_actual >= MUESTRAS_MAX,
+        "preview": frame_preview,
     })
 
 
