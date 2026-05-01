@@ -715,7 +715,7 @@
                     {{
                       conteoCaptura >= MUESTRAS_MAX
                         ? "Completada"
-                        : "Iniciar grabacion"
+                        : "Iniciar grabacion [Espacio]"
                     }}
                   </button>
                   <button
@@ -726,10 +726,11 @@
                       margin-bottom: 10px;
                       padding: 12px;
                       color: #e0a052;
+                      border-color: #e0a052;
                     "
                     @click="detenerCaptura"
                   >
-                    Detener
+                    Detener [Espacio]
                   </button>
 
                   <p
@@ -741,7 +742,15 @@
                   >
                     La deteccion esta activa desde que se abre la camara.<br />
                     Presiona <strong>Iniciar grabacion</strong> o
-                    <kbd style="background:#1a1d2a;padding:1px 5px;border-radius:3px;font-size:11px">Espacio</kbd>
+                    <kbd
+                      style="
+                        background: #1a1d2a;
+                        padding: 1px 5px;
+                        border-radius: 3px;
+                        font-size: 11px;
+                      "
+                      >Espacio</kbd
+                    >
                     para guardar muestras.
                   </p>
 
@@ -777,10 +786,16 @@
                     "
                   >
                     <span
-                      >Env: <strong style="color: #888">{{ framesEnviados }}</strong></span
+                      >Env:
+                      <strong style="color: #888">{{
+                        framesEnviados
+                      }}</strong></span
                     >
                     <span
-                      >Rec: <strong style="color: #888">{{ framesRecibidos }}</strong></span
+                      >Rec:
+                      <strong style="color: #888">{{
+                        framesRecibidos
+                      }}</strong></span
                     >
                     <span
                       >Vel:
@@ -790,8 +805,8 @@
                             fpsActual >= 8
                               ? '#00cc88'
                               : fpsActual > 0
-                              ? '#e0a052'
-                              : '#555',
+                                ? '#e0a052'
+                                : '#555',
                         }"
                         >{{ fpsActual }} fps</strong
                       ></span
@@ -843,9 +858,9 @@ const capturaActiva = ref(false);
 const conteoCaptura = ref(0);
 const deteccionActiva = ref(false);
 const framePreview = ref(""); // frame anotado con landmarks devuelto por el servidor
-const framesEnviados = ref(0);   // frames enviados al servidor
-const framesRecibidos = ref(0);  // respuestas recibidas del servidor
-const fpsActual = ref(0);        // respuestas por segundo (promedio movil)
+const framesEnviados = ref(0); // frames enviados al servidor
+const framesRecibidos = ref(0); // respuestas recibidas del servidor
+const fpsActual = ref(0); // respuestas por segundo (promedio movil)
 const camarasDisponibles = ref([]); // lista de { deviceId, label }
 const camaraSeleccionada = ref(""); // deviceId activo
 let streamCamara = null;
