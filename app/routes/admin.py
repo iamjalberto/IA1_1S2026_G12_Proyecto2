@@ -285,9 +285,10 @@ def estado_entrenamiento():
 @admin_bp.route("/senas", methods=["GET"])
 @requiere_login
 def listar_senas():
-    """Retorna la lista actual de senas disponibles en el sistema."""
+    """Retorna la lista actual de senas disponibles con sus descripciones."""
     config = cargar_config()
-    return jsonify({"senas": config.get("senas_disponibles", [])})
+    descripciones = config.get("senas_descripciones", {})
+    return jsonify({"senas": config.get("senas_disponibles", []), "descripciones": descripciones})
 
 
 @admin_bp.route("/senas", methods=["POST"])
@@ -296,6 +297,7 @@ def agregar_sena():
     """Agrega una nueva sena a la lista de senas disponibles."""
     data = request.get_json() or {}
     nueva = data.get("sena", "").strip().lower()
+    descripcion = data.get("descripcion", "").strip()[:300]  # max 300 chars
 
     if not nueva:
         return jsonify({"exito": False, "mensaje": "El nombre de la sena no puede estar vacio"}), 400
@@ -312,6 +314,10 @@ def agregar_sena():
 
     senas.append(nueva)
     config["senas_disponibles"] = senas
+    if descripcion:
+        descripciones = config.get("senas_descripciones", {})
+        descripciones[nueva] = descripcion
+        config["senas_descripciones"] = descripciones
     guardar_config(config)
     return jsonify({"exito": True, "mensaje": f"Sena '{nueva}' agregada", "senas": senas})
 

@@ -94,6 +94,8 @@ def capturar_frame():
     data = request.get_json(silent=True) or {}
     clase = (data.get("clase") or "").strip()
     frame_b64 = data.get("frame") or ""
+    # guardar=False significa que solo se quiere el preview/deteccion, no guardar en CSV
+    guardar = bool(data.get("guardar", True))
 
     if not clase or not frame_b64:
         return jsonify({"error": "Faltan datos"}), 400
@@ -105,7 +107,7 @@ def capturar_frame():
     count_actual = _contar_muestras_clase(clase)
 
     # No guardar mas si ya se alcanzo el maximo para esta clase
-    if count_actual >= MUESTRAS_MAX:
+    if guardar and count_actual >= MUESTRAS_MAX:
         return jsonify({"detectado": False, "count": count_actual, "lleno": True})
 
     # Decodificar la imagen JPEG enviada como base64 desde el canvas del navegador
@@ -142,19 +144,20 @@ def capturar_frame():
     if not detectado:
         return jsonify({"detectado": False, "count": count_actual, "preview": frame_preview})
 
-    caracteristicas = _normalizar_landmarks(resultado.multi_hand_landmarks[0])
+    # Solo escribir al CSV si el cliente pidio guardar (capturaActiva en el frontend)
+    if guardar:
+        caracteristicas = _normalizar_landmarks(resultado.multi_hand_landmarks[0])
+        _asegurar_csv()
+        with _lock_csv:
+            with open(RUTA_CSV, "a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([clase] + caracteristicas)
+        count_actual += 1
 
-    _asegurar_csv()
-    with _lock_csv:
-        with open(RUTA_CSV, "a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([clase] + caracteristicas)
-
-    count_actual += 1
     return jsonify({
         "detectado": True,
         "count": count_actual,
-        "lleno": count_actual >= MUESTRAS_MAX,
+        "lleno": guardar and count_actual >= MUESTRAS_MAX,
         "preview": frame_preview,
     })
 

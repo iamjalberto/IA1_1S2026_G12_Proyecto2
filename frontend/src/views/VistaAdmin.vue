@@ -443,6 +443,16 @@
               placeholder="ej: buenos_dias"
               @keyup.enter="agregarSena"
             />
+            <label style="margin-top: 10px; display: block">
+              Como se hace esta sena (descripcion para el capturador)
+            </label>
+            <textarea
+              v-model="nuevaDescripcion"
+              class="input"
+              rows="2"
+              placeholder="ej: Extiende los 5 dedos y agita la mano de un lado a otro"
+              style="resize: vertical; font-size: 13px"
+            ></textarea>
           </div>
           <button class="btn btn--primario" @click="agregarSena">
             Agregar
@@ -728,9 +738,32 @@
                       margin: 0;
                     "
                   >
-                    Coloca la mano en el encuadre y presiona Iniciar.<br />
-                    El borde verde confirma que el servidor detecta tu mano.
+                    La deteccion esta activa desde que se abre la camara.<br />
+                    Presiona <strong>Iniciar grabacion</strong> cuando estes
+                    listo para guardar muestras.
                   </p>
+
+                  <!-- Descripcion de como hacer la sena -->
+                  <div
+                    v-if="descripciones[claseCapturando]"
+                    style="
+                      margin-top: 12px;
+                      background: #1a1d2a;
+                      border-left: 3px solid #0df;
+                      padding: 10px 12px;
+                      border-radius: 6px;
+                      font-size: 13px;
+                      color: #c0c8e0;
+                      line-height: 1.5;
+                    "
+                  >
+                    <strong
+                      style="color: #0df; display: block; margin-bottom: 4px"
+                      >Como hacer la sena:</strong
+                    >
+                    {{ descripciones[claseCapturando] }}
+                  </div>
+
                   <p style="font-size: 11px; color: #555; margin: 8px 0 0">
                     Frames enviados: {{ framesEnviados }}
                   </p>
@@ -767,7 +800,9 @@ const loginForm = ref({ usuario: "", contrasena: "" });
 const loginError = ref("");
 
 const nuevaSena = ref("");
+const nuevaDescripcion = ref("");
 const senas = ref([]);
+const descripciones = ref({});
 const progreso = ref({});
 
 // Estado del panel de captura web
@@ -778,10 +813,14 @@ const capturaActiva = ref(false);
 const conteoCaptura = ref(0);
 const deteccionActiva = ref(false);
 const framePreview = ref(""); // frame anotado con landmarks devuelto por el servidor
+const framesEnviados = ref(0); // contador de frames enviados al servidor
 const camarasDisponibles = ref([]); // lista de { deviceId, label }
 const camaraSeleccionada = ref(""); // deviceId activo
 let streamCamara = null;
 let intervalCaptura = null;
+// Intervalo de preview: activo siempre que el modal este abierto
+// independiente de si se esta guardando o no
+let intervalPreview = null;
 
 const tabActiva = ref("config");
 const guardando = ref(false);
@@ -997,6 +1036,7 @@ async function cargarSenas() {
     if (res.ok) {
       const data = await res.json();
       senas.value = data.senas;
+      descripciones.value = data.descripciones || {};
     }
   } catch {
     /* sin conexion */
@@ -1053,6 +1093,10 @@ async function iniciarStream() {
     if (videoRef.value) {
       videoRef.value.srcObject = streamCamara;
     }
+    // Iniciar el loop de preview: siempre envia frames para mostrar los landmarks
+    // sin guardar datos (guardar=false). Se ejecuta aunque no se haya presionado Iniciar.
+    if (intervalPreview) clearInterval(intervalPreview);
+    intervalPreview = setInterval(enviarFrame, 100);
   } catch (e) {
     mostrarToast("No se pudo acceder a la camara: " + e.message, "error");
     claseCapturando.value = null;
@@ -1080,6 +1124,11 @@ async function listarCamaras() {
 
 function cerrarCaptura() {
   detenerCaptura();
+  // Detener tambien el loop de preview
+  if (intervalPreview) {
+    clearInterval(intervalPreview);
+    intervalPreview = null;
+  }
   claseCapturando.value = null;
   framePreview.value = "";
   framesEnviados.value = 0;
@@ -1092,11 +1141,13 @@ function cerrarCaptura() {
 function iniciarCaptura() {
   if (capturaActiva.value || !claseCapturando.value) return;
   if (conteoCaptura.value >= MUESTRAS_MAX) return;
+  // El loop de preview ya esta corriendo (intervalPreview).
+  // Solo activamos el flag para que enviarFrame empiece a guardar.
   capturaActiva.value = true;
-  intervalCaptura = setInterval(enviarFrame, 100); // ~10fps
 }
 
 function detenerCaptura() {
+  // Solo desactiva el guardado; el loop de preview sigue corriendo
   capturaActiva.value = false;
   if (intervalCaptura) {
     clearInterval(intervalCaptura);
@@ -1105,9 +1156,9 @@ function detenerCaptura() {
 }
 
 async function enviarFrame() {
-  if (!capturaActiva.value || !videoRef.value || !claseCapturando.value) return;
-  if (conteoCaptura.value >= MUESTRAS_MAX) {
-    detenerCaptura();
+  if (!videoRef.value || !claseCapturando.value) return;
+  if (capturaActiva.value && conteoCaptura.value >= MUESTRAS_MAX) {
+    capturaActiva.value = false;
     progreso.value[claseCapturando.value] = MUESTRAS_MAX;
     mostrarToast(`Captura de '${claseCapturando.value}' completada`, "exito");
     return;
@@ -1132,7 +1183,12 @@ async function enviarFrame() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ clase: claseCapturando.value, frame }),
+      // guardar=true solo cuando capturaActiva esta encendida
+      body: JSON.stringify({
+        clase: claseCapturando.value,
+        frame,
+        guardar: capturaActiva.value,
+      }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -1197,12 +1253,19 @@ async function agregarSena() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ sena: nombre }),
+      body: JSON.stringify({
+        sena: nombre,
+        descripcion: nuevaDescripcion.value.trim(),
+      }),
     });
     const data = await res.json();
     if (data.exito) {
       senas.value = data.senas;
+      if (nuevaDescripcion.value.trim()) {
+        descripciones.value[nombre] = nuevaDescripcion.value.trim();
+      }
       nuevaSena.value = "";
+      nuevaDescripcion.value = "";
       mostrarToast(`Sena '${nombre}' agregada`, "exito");
     } else {
       mostrarToast(data.mensaje, "error");

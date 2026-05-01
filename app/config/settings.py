@@ -12,6 +12,7 @@ CONFIG_DEFAULT = {
         "hola", "gracias", "si", "no", "ayuda",
         "agua", "bien", "mal", "por_favor", "casa"
     ],
+    "senas_descripciones": {},
     "formato_mensaje": "Deteccion HandTalk AI:\nSena: {sena}\nConfianza: {confianza:.0%}",
     "telegram_activo": False,
     "telegram_chat_id": "",
