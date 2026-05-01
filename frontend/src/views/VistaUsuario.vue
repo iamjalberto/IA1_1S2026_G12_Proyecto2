@@ -252,10 +252,10 @@ async function cargarSenas() {
 
 async function cargarConfig() {
   try {
-    const res = await fetch("/admin/");
+    const res = await fetch("/admin/config_publica");
     if (res.ok) {
       const data = await res.json();
-      configTelegramActivo.value = data.config?.telegram_activo ?? false;
+      configTelegramActivo.value = data.telegram_activo ?? false;
     }
   } catch {
     /* sin conexion */

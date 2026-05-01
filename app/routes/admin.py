@@ -51,6 +51,20 @@ def verificar():
     return jsonify({"autenticado": bool(session.get("admin_autenticado"))})
 
 
+@admin_bp.route("/config_publica")
+def config_publica():
+    """
+    Expone unicamente los campos de configuracion que el modulo de usuario necesita
+    sin requerir sesion de administrador.
+    """
+    config = cargar_config()
+    return jsonify({
+        "telegram_activo": config.get("telegram_activo", False),
+        "senas_disponibles": config.get("senas_disponibles", []),
+        "umbral_confianza": config.get("umbral_confianza", 0.70),
+    })
+
+
 @admin_bp.route("/")
 @requiere_login
 def index():
