@@ -585,34 +585,46 @@
                 "
               >
                 <!-- Preview de camara / frame anotado con landmarks -->
-                <div style="position: relative; flex-shrink: 0">
+                <div style="position: relative; flex-shrink: 0; width: 320px">
                   <!--
-                    Video directo: visible mientras el servidor no devuelva
-                    el primer frame anotado. Sirve ademas como fuente para
-                    el canvas que captura los frames que se envian al backend.
+                    El video SIEMPRE renderiza (nunca display:none) para que
+                    drawImage del canvas pueda capturar frames aunque el img
+                    lo tape. scaleX(-1) corrige el efecto espejo de la camara.
                   -->
                   <video
                     ref="videoRef"
                     autoplay
                     playsinline
                     muted
-                    :style="{
-                      width: '320px',
-                      borderRadius: '10px',
-                      display: framePreview ? 'none' : 'block',
-                      background: '#000',
-                      border: '2px solid #2a2d3e',
-                    }"
-                  ></video>
-                  <!-- Imagen con el frame anotado por el backend (muestra landmarks) -->
-                  <img
-                    v-if="framePreview"
-                    :src="'data:image/jpeg;base64,' + framePreview"
                     style="
                       width: 320px;
                       border-radius: 10px;
                       display: block;
                       background: #000;
+                      transform: scaleX(-1);
+                    "
+                    :style="{
+                      border: deteccionActiva
+                        ? '2px solid #00ee55'
+                        : '2px solid #2a2d3e',
+                    }"
+                  ></video>
+                  <!--
+                    Frame anotado con landmarks del servidor.
+                    Se superpone sobre el video (posicion absoluta).
+                    scaleX(-1) mantiene la misma orientacion que el video.
+                  -->
+                  <img
+                    v-if="framePreview"
+                    :src="'data:image/jpeg;base64,' + framePreview"
+                    style="
+                      position: absolute;
+                      top: 0;
+                      left: 0;
+                      width: 320px;
+                      border-radius: 10px;
+                      display: block;
+                      transform: scaleX(-1);
                       border: 2px solid;
                     "
                     :style="{
