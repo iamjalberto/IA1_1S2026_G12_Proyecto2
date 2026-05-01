@@ -32,12 +32,16 @@ captura_bp = Blueprint("captura", __name__)
 _mp_manos_mod = mp.solutions.hands
 _mp_dibujo = mp.solutions.drawing_utils
 _mp_estilos = mp.solutions.drawing_styles
-# Estilos compactos para frames de 320x240: radio y grosor reducidos
-# para que los landmarks no luzcan gigantes en resolucion baja
-_estilo_puntos = _mp_dibujo.DrawingSpec(
-    color=(0, 230, 255), thickness=cv2.FILLED, circle_radius=2
-)
-_estilo_conexiones = _mp_dibujo.DrawingSpec(color=(0, 200, 80), thickness=1)
+# Reducir el radio del estilo por defecto de MediaPipe para que los puntos
+# no luzcan gigantes en frames de 320x240, pero conservando los colores
+# variados por articulacion que trae el estilo original.
+_estilo_puntos_variados = {
+    idx: _mp_dibujo.DrawingSpec(
+        color=spec.color, thickness=cv2.FILLED, circle_radius=2
+    )
+    for idx, spec in _mp_estilos.get_default_hand_landmarks_style().items()
+}
+_estilo_conexiones = _mp_dibujo.DrawingSpec(color=(180, 180, 180), thickness=1)
 _detector = _mp_manos_mod.Hands(
     static_image_mode=False,  # modo tracking: mas rapido al procesar frames consecutivos
     max_num_hands=1,
@@ -157,7 +161,7 @@ def capturar_frame():
                 frame_anotado,
                 mano_lm,
                 _mp_manos_mod.HAND_CONNECTIONS,
-                _estilo_puntos,
+                _estilo_puntos_variados,
                 _estilo_conexiones,
             )
 
