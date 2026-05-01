@@ -33,6 +33,7 @@ _mp_manos_mod = mp.solutions.hands
 _mp_dibujo = mp.solutions.drawing_utils
 _mp_estilos = mp.solutions.drawing_styles
 _detector = _mp_manos_mod.Hands(
+    static_image_mode=True,   # cada frame es independiente, mas robusto para JPEG del navegador
     max_num_hands=1,
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5,

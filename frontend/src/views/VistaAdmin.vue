@@ -731,6 +731,9 @@
                     Coloca la mano en el encuadre y presiona Iniciar.<br />
                     El borde verde confirma que el servidor detecta tu mano.
                   </p>
+                  <p style="font-size: 11px; color: #555; margin: 8px 0 0">
+                    Frames enviados: {{ framesEnviados }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1079,6 +1082,7 @@ function cerrarCaptura() {
   detenerCaptura();
   claseCapturando.value = null;
   framePreview.value = "";
+  framesEnviados.value = 0;
   if (streamCamara) {
     streamCamara.getTracks().forEach((t) => t.stop());
     streamCamara = null;
@@ -1109,20 +1113,20 @@ async function enviarFrame() {
     return;
   }
 
-  // Si el video todavia no cargó las dimensiones, omitir este frame
-  // para no enviar un canvas vacio que MediaPipe no puede procesar
+  // Si el video todavia no tiene dimensiones, omitir este frame
   const vw = videoRef.value.videoWidth;
   const vh = videoRef.value.videoHeight;
-  if (!vw || !vh || videoRef.value.readyState < 2) return;
+  if (!vw || !vh) return;
 
   const canvas = document.createElement("canvas");
   canvas.width = vw;
   canvas.height = vh;
   canvas.getContext("2d").drawImage(videoRef.value, 0, 0);
   const frame = canvas
-    .toDataURL("image/jpeg", 0.7)
+    .toDataURL("image/jpeg", 0.85)
     .replace(/^data:image\/jpeg;base64,/, "");
 
+  framesEnviados.value++;
   try {
     const res = await fetch("/admin/capturar_frame", {
       method: "POST",
