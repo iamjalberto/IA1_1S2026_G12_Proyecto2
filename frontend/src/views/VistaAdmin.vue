@@ -535,6 +535,7 @@
               padding: 16px;
             "
             @keydown.esc.window="cerrarCaptura"
+            @keydown.space.window.prevent="toggleCaptura"
           >
             <div
               style="
@@ -739,8 +740,9 @@
                     "
                   >
                     La deteccion esta activa desde que se abre la camara.<br />
-                    Presiona <strong>Iniciar grabacion</strong> cuando estes
-                    listo para guardar muestras.
+                    Presiona <strong>Iniciar grabacion</strong> o
+                    <kbd style="background:#1a1d2a;padding:1px 5px;border-radius:3px;font-size:11px">Espacio</kbd>
+                    para guardar muestras.
                   </p>
 
                   <!-- Descripcion de como hacer la sena -->
@@ -764,9 +766,37 @@
                     {{ descripciones[claseCapturando] }}
                   </div>
 
-                  <p style="font-size: 11px; color: #555; margin: 8px 0 0">
-                    Frames enviados: {{ framesEnviados }}
-                  </p>
+                  <!-- Metricas de flujo: enviados, recibidos, fps -->
+                  <div
+                    style="
+                      display: flex;
+                      gap: 14px;
+                      margin-top: 10px;
+                      font-size: 11px;
+                      color: #555;
+                    "
+                  >
+                    <span
+                      >Env: <strong style="color: #888">{{ framesEnviados }}</strong></span
+                    >
+                    <span
+                      >Rec: <strong style="color: #888">{{ framesRecibidos }}</strong></span
+                    >
+                    <span
+                      >Vel:
+                      <strong
+                        :style="{
+                          color:
+                            fpsActual >= 8
+                              ? '#00cc88'
+                              : fpsActual > 0
+                              ? '#e0a052'
+                              : '#555',
+                        }"
+                        >{{ fpsActual }} fps</strong
+                      ></span
+                    >
+                  </div>
                 </div>
               </div>
             </div>
@@ -813,7 +843,9 @@ const capturaActiva = ref(false);
 const conteoCaptura = ref(0);
 const deteccionActiva = ref(false);
 const framePreview = ref(""); // frame anotado con landmarks devuelto por el servidor
-const framesEnviados = ref(0); // contador de frames enviados al servidor
+const framesEnviados = ref(0);   // frames enviados al servidor
+const framesRecibidos = ref(0);  // respuestas recibidas del servidor
+const fpsActual = ref(0);        // respuestas por segundo (promedio movil)
 const camarasDisponibles = ref([]); // lista de { deviceId, label }
 const camaraSeleccionada = ref(""); // deviceId activo
 let streamCamara = null;
@@ -821,6 +853,9 @@ let intervalCaptura = null;
 // Intervalo de preview: activo siempre que el modal este abierto
 // independiente de si se esta guardando o no
 let intervalPreview = null;
+// Para calcular fps: contamos respuestas en ventanas de 1 segundo
+let _fpsContador = 0;
+let _fpsInterval = null;
 
 const tabActiva = ref("config");
 const guardando = ref(false);
@@ -1097,6 +1132,13 @@ async function iniciarStream() {
     // sin guardar datos (guardar=false). Se ejecuta aunque no se haya presionado Iniciar.
     if (intervalPreview) clearInterval(intervalPreview);
     intervalPreview = setInterval(enviarFrame, 100);
+    // Medir fps: cada segundo tomamos el contador y lo reseteamos
+    if (_fpsInterval) clearInterval(_fpsInterval);
+    _fpsContador = 0;
+    _fpsInterval = setInterval(() => {
+      fpsActual.value = _fpsContador;
+      _fpsContador = 0;
+    }, 1000);
   } catch (e) {
     mostrarToast("No se pudo acceder a la camara: " + e.message, "error");
     claseCapturando.value = null;
@@ -1129,9 +1171,16 @@ function cerrarCaptura() {
     clearInterval(intervalPreview);
     intervalPreview = null;
   }
+  if (_fpsInterval) {
+    clearInterval(_fpsInterval);
+    _fpsInterval = null;
+  }
   claseCapturando.value = null;
   framePreview.value = "";
   framesEnviados.value = 0;
+  framesRecibidos.value = 0;
+  fpsActual.value = 0;
+  _fpsContador = 0;
   if (streamCamara) {
     streamCamara.getTracks().forEach((t) => t.stop());
     streamCamara = null;
@@ -1144,6 +1193,14 @@ function iniciarCaptura() {
   // El loop de preview ya esta corriendo (intervalPreview).
   // Solo activamos el flag para que enviarFrame empiece a guardar.
   capturaActiva.value = true;
+}
+
+function toggleCaptura() {
+  if (capturaActiva.value) {
+    detenerCaptura();
+  } else {
+    iniciarCaptura();
+  }
 }
 
 function detenerCaptura() {
@@ -1192,6 +1249,8 @@ async function enviarFrame() {
     });
     if (res.ok) {
       const data = await res.json();
+      framesRecibidos.value++;
+      _fpsContador++;
       deteccionActiva.value = data.detectado;
       // Actualizar el preview con el frame anotado devuelto por el servidor
       if (data.preview) {
@@ -1202,7 +1261,7 @@ async function enviarFrame() {
         progreso.value[claseCapturando.value] = data.count;
       }
       if (data.lleno) {
-        detenerCaptura();
+        capturaActiva.value = false;
         mostrarToast(
           `Captura de '${claseCapturando.value}' completada`,
           "exito",
