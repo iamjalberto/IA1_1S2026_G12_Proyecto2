@@ -6,8 +6,9 @@ Los datos se guardan en dataset/dataset.csv.
 Controles:
   [0-9]   Seleccionar la clase (sena) a capturar
   ESPACIO Iniciar captura automatica de MUESTRAS_POR_CLASE frames
+  R       Reiniciar (borrar) muestras de la clase actual
   C       Cambiar camara (cuando no esta grabando)
-  Q       Salir
+  Q / ESC Salir
 """
 
 import csv
@@ -92,6 +93,25 @@ def contar_muestras(ruta_csv: str) -> dict:
             if fila and fila[0] in conteo:
                 conteo[fila[0]] += 1
     return conteo
+
+
+def borrar_clase(ruta_csv: str, clase: str) -> None:
+    """
+    Elimina del CSV todas las filas que pertenecen a la clase indicada.
+    Util para volver a grabar una sena desde cero si la captura salio mal.
+    """
+    if not os.path.exists(ruta_csv):
+        return
+    with open(ruta_csv, "r") as f:
+        filas = list(csv.reader(f))
+    # La primera fila es el encabezado, se conserva siempre
+    encabezado = filas[0] if filas else []
+    resto = [fila for fila in filas[1:] if fila and fila[0] != clase]
+    with open(ruta_csv, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(encabezado)
+        writer.writerows(resto)
+    print(f"  Clase '{clase}' reiniciada — muestras borradas del CSV.")
 
 
 def inicializar_csv(ruta_csv: str) -> None:
@@ -301,8 +321,8 @@ def main():
                 cv2.putText(frame, f"GRABANDO {frames_capturados}/{MUESTRAS_POR_CLASE}",
                             (8, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 50), 2)
             else:
-                cv2.putText(frame, "ESPACIO: capturar  Q: salir",
-                            (8, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (160, 160, 160), 1)
+                cv2.putText(frame, "ESPACIO: capturar  R: reiniciar  Q/ESC: salir",
+                            (8, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (160, 160, 160), 1)
 
             # Lista de clases con contador
             y = 180
@@ -317,7 +337,7 @@ def main():
 
             tecla = cv2.waitKey(1) & 0xFF
 
-            if tecla == ord("q"):
+            if tecla == ord("q") or tecla == 27:  # Q o ESC para salir
                 break
             elif ord("0") <= tecla <= ord("9"):
                 idx = tecla - ord("0")
@@ -335,6 +355,11 @@ def main():
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 print(f"Camara cambiada a: {indice_cam}")
+            elif tecla == ord("r") and not capturando:
+                # Borrar todas las muestras de la clase actual para volver a grabarla
+                borrar_clase(RUTA_CSV, CLASES[clase_actual])
+                frames_capturados = 0
+                evidencias_guardadas = 0
             elif tecla == ord(" ") and not capturando:
                 capturando = True
                 frames_capturados = 0

@@ -438,14 +438,178 @@
               margin-bottom: 8px;
             "
           >
-            <span style="font-size: 15px; font-weight: 500">{{ sena }}</span>
+            <div style="display: flex; align-items: center; gap: 10px; flex: 1">
+              <span style="font-size: 15px; font-weight: 500">{{ sena }}</span>
+              <span style="font-size: 12px; color: var(--texto-suave)">
+                {{ progreso[sena] ?? "..." }} / {{ MUESTRAS_MAX }} muestras
+              </span>
+            </div>
+            <div style="display: flex; gap: 6px">
+              <button
+                class="btn btn--primario"
+                style="font-size: 12px; padding: 4px 10px"
+                @click="abrirCaptura(sena)"
+              >
+                Capturar
+              </button>
+              <button
+                class="btn"
+                style="font-size: 12px; padding: 4px 10px; color: #e0a052"
+                @click="reiniciarMuestras(sena)"
+              >
+                Reiniciar
+              </button>
+              <button
+                class="btn"
+                style="font-size: 12px; padding: 4px 10px; color: #e05252"
+                @click="eliminarSena(sena)"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel de captura con camara del navegador -->
+        <div
+          v-if="claseCapturando"
+          style="
+            margin-top: 20px;
+            background: #11131f;
+            border: 1px solid #2a2d3e;
+            border-radius: 12px;
+            padding: 20px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 16px;
+            "
+          >
+            <h3 style="margin: 0; font-size: 16px">
+              Capturando:
+              <span style="color: #0df">{{ claseCapturando }}</span>
+            </h3>
             <button
               class="btn"
-              style="font-size: 12px; padding: 4px 12px; color: #e05252"
-              @click="eliminarSena(sena)"
+              style="font-size: 12px; padding: 4px 12px"
+              @click="cerrarCaptura"
             >
-              Eliminar
+              Cerrar camara
             </button>
+          </div>
+
+          <div
+            style="
+              display: flex;
+              gap: 20px;
+              align-items: flex-start;
+              flex-wrap: wrap;
+            "
+          >
+            <!-- Preview de camara -->
+            <div style="position: relative">
+              <video
+                ref="videoRef"
+                autoplay
+                playsinline
+                muted
+                style="
+                  width: 280px;
+                  border-radius: 8px;
+                  background: #000;
+                  display: block;
+                "
+              ></video>
+              <!-- Indicador de deteccion -->
+              <div
+                :style="{
+                  position: 'absolute',
+                  top: '8px',
+                  right: '8px',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: deteccionActiva ? '#00ee55' : '#555',
+                  boxShadow: deteccionActiva ? '0 0 6px #00ee55' : 'none',
+                  transition: 'background 0.2s',
+                }"
+              ></div>
+            </div>
+
+            <!-- Controles -->
+            <div style="flex: 1; min-width: 180px">
+              <p style="margin: 0 0 4px; font-size: 15px; font-weight: 600">
+                {{ conteoCaptura }} / {{ MUESTRAS_MAX }}
+              </p>
+              <!-- Barra de progreso -->
+              <div
+                style="
+                  height: 8px;
+                  background: #1a1d2a;
+                  border-radius: 4px;
+                  margin-bottom: 16px;
+                  overflow: hidden;
+                "
+              >
+                <div
+                  :style="{
+                    width:
+                      Math.min((conteoCaptura / MUESTRAS_MAX) * 100, 100) + '%',
+                    height: '100%',
+                    background: '#0df',
+                    borderRadius: '4px',
+                    transition: 'width 0.2s',
+                  }"
+                ></div>
+              </div>
+
+              <button
+                v-if="!capturaActiva"
+                class="btn btn--primario"
+                style="width: 100%; margin-bottom: 8px"
+                @click="iniciarCaptura"
+                :disabled="conteoCaptura >= MUESTRAS_MAX"
+              >
+                {{
+                  conteoCaptura >= MUESTRAS_MAX
+                    ? "Completada"
+                    : "Iniciar grabacion"
+                }}
+              </button>
+              <button
+                v-else
+                class="btn"
+                style="width: 100%; margin-bottom: 8px; color: #e0a052"
+                @click="detenerCaptura"
+              >
+                Detener
+              </button>
+
+              <p
+                :style="{
+                  fontSize: '12px',
+                  color: deteccionActiva ? '#0df' : '#666',
+                  margin: 0,
+                }"
+              >
+                {{
+                  deteccionActiva ? "Mano detectada" : "Sin deteccion de mano"
+                }}
+              </p>
+              <p
+                style="
+                  font-size: 11px;
+                  color: var(--texto-suave);
+                  margin: 8px 0 0;
+                "
+              >
+                Asegurate de tener buena iluminacion y la mano visible.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -461,7 +625,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 
 const tabs = [
   { id: "config", label: "Configuracion" },
@@ -477,6 +641,17 @@ const loginError = ref("");
 
 const nuevaSena = ref("");
 const senas = ref([]);
+const progreso = ref({});
+
+// Estado del panel de captura web
+const MUESTRAS_MAX = 500;
+const videoRef = ref(null);
+const claseCapturando = ref(null);
+const capturaActiva = ref(false);
+const conteoCaptura = ref(0);
+const deteccionActiva = ref(false);
+let streamCamara = null;
+let intervalCaptura = null;
 
 const tabActiva = ref("config");
 const guardando = ref(false);
@@ -616,6 +791,7 @@ async function iniciarSesion() {
       cargarHistorial();
       cargarModeloInfo();
       cargarSenas();
+      cargarProgreso();
     } else {
       loginError.value = data.mensaje || "Credenciales incorrectas";
     }
@@ -641,6 +817,147 @@ async function cargarSenas() {
     /* sin conexion */
   }
 }
+
+async function cargarProgreso() {
+  try {
+    const res = await fetch("/admin/progreso_captura", {
+      credentials: "include",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      progreso.value = data.progreso;
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function abrirCaptura(sena) {
+  // Si se abre otra sena, cerramos la anterior primero
+  if (claseCapturando.value && claseCapturando.value !== sena) {
+    cerrarCaptura();
+  }
+  // Si se toca la misma sena, hacer toggle del panel
+  if (claseCapturando.value === sena) {
+    cerrarCaptura();
+    return;
+  }
+  claseCapturando.value = sena;
+  conteoCaptura.value = progreso.value[sena] ?? 0;
+  deteccionActiva.value = false;
+
+  try {
+    streamCamara = await navigator.mediaDevices.getUserMedia({ video: true });
+    // Esperamos al siguiente tick para que el elemento <video> este en el DOM
+    await nextTick();
+    if (videoRef.value) {
+      videoRef.value.srcObject = streamCamara;
+    }
+  } catch (e) {
+    mostrarToast("No se pudo acceder a la camara: " + e.message, "error");
+    claseCapturando.value = null;
+    streamCamara = null;
+  }
+}
+
+function cerrarCaptura() {
+  detenerCaptura();
+  claseCapturando.value = null;
+  if (streamCamara) {
+    streamCamara.getTracks().forEach((t) => t.stop());
+    streamCamara = null;
+  }
+}
+
+function iniciarCaptura() {
+  if (capturaActiva.value || !claseCapturando.value) return;
+  if (conteoCaptura.value >= MUESTRAS_MAX) return;
+  capturaActiva.value = true;
+  intervalCaptura = setInterval(enviarFrame, 100); // ~10fps
+}
+
+function detenerCaptura() {
+  capturaActiva.value = false;
+  if (intervalCaptura) {
+    clearInterval(intervalCaptura);
+    intervalCaptura = null;
+  }
+}
+
+async function enviarFrame() {
+  if (!capturaActiva.value || !videoRef.value || !claseCapturando.value) return;
+  if (conteoCaptura.value >= MUESTRAS_MAX) {
+    detenerCaptura();
+    progreso.value[claseCapturando.value] = MUESTRAS_MAX;
+    mostrarToast(`Captura de '${claseCapturando.value}' completada`, "exito");
+    return;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = videoRef.value.videoWidth || 320;
+  canvas.height = videoRef.value.videoHeight || 240;
+  canvas.getContext("2d").drawImage(videoRef.value, 0, 0);
+  const frame = canvas
+    .toDataURL("image/jpeg", 0.7)
+    .replace(/^data:image\/jpeg;base64,/, "");
+
+  try {
+    const res = await fetch("/admin/capturar_frame", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ clase: claseCapturando.value, frame }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      deteccionActiva.value = data.detectado;
+      if (data.detectado) {
+        conteoCaptura.value = data.count;
+        progreso.value[claseCapturando.value] = data.count;
+      }
+      if (data.lleno) {
+        detenerCaptura();
+        mostrarToast(
+          `Captura de '${claseCapturando.value}' completada`,
+          "exito",
+        );
+      }
+    }
+  } catch {
+    // Ignorar errores de red transitorios durante la captura
+  }
+}
+
+async function reiniciarMuestras(sena) {
+  if (!confirm(`Borrar todas las muestras de '${sena}'?`)) return;
+  try {
+    const res = await fetch(`/admin/borrar_muestras/${sena}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      progreso.value[sena] = 0;
+      if (claseCapturando.value === sena) {
+        conteoCaptura.value = 0;
+      }
+      mostrarToast(`Muestras de '${sena}' borradas`, "exito");
+    }
+  } catch {
+    mostrarToast("Error de conexion", "error");
+  }
+}
+
+// Cargar el progreso cada vez que se abre el tab de senas
+watch(tabActiva, (tab) => {
+  if (tab === "senas" && autenticado.value) {
+    cargarProgreso();
+  }
+});
+
+// Detener camara si el componente se desmonta
+onUnmounted(() => {
+  cerrarCaptura();
+});
 
 async function agregarSena() {
   const nombre = nuevaSena.value.trim();
@@ -696,6 +1013,7 @@ onMounted(async () => {
         cargarHistorial();
         cargarModeloInfo();
         cargarSenas();
+        cargarProgreso();
       }
     }
   } catch {

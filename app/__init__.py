@@ -3,6 +3,7 @@ from flask import Flask
 from flask_cors import CORS
 from app.routes.main import main_bp
 from app.routes.admin import admin_bp
+from app.routes.captura import captura_bp
 
 
 def crear_app() -> Flask:
@@ -17,5 +18,6 @@ def crear_app() -> Flask:
 
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(captura_bp)
 
     return app
