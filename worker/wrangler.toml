@@ -1,0 +1,6 @@
+name = "handtalk-ai-bot"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+
+# El token se agrega como secret con:
+#   wrangler secret put TELEGRAM_TOKEN
