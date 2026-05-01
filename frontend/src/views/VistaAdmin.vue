@@ -496,6 +496,7 @@
             </div>
             <div style="display: flex; gap: 6px">
               <button
+                v-if="(progreso[sena] ?? 0) < MUESTRAS_MAX"
                 class="btn btn--primario"
                 style="font-size: 12px; padding: 4px 10px"
                 @click="abrirCaptura(sena)"
@@ -503,6 +504,20 @@
                 Capturar
               </button>
               <button
+                v-else
+                class="btn"
+                style="
+                  font-size: 12px;
+                  padding: 4px 10px;
+                  color: #e0a052;
+                  border-color: #e0a052;
+                "
+                @click="reiniciarMuestras(sena)"
+              >
+                Reiniciar muestras
+              </button>
+              <button
+                v-if="(progreso[sena] ?? 0) < MUESTRAS_MAX"
                 class="btn"
                 style="font-size: 12px; padding: 4px 10px; color: #e0a052"
                 @click="reiniciarMuestras(sena)"

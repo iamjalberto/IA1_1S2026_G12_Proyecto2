@@ -145,14 +145,19 @@ def capturar_frame():
         return jsonify({"detectado": False, "count": count_actual, "preview": frame_preview})
 
     # Solo escribir al CSV si el cliente pidio guardar (capturaActiva en el frontend)
+    # El lock cubre tanto la verificacion como la escritura para evitar condicion de carrera
+    # que causaria guardar muestras de mas cuando llegan dos frames en vuelo al mismo tiempo
     if guardar:
         caracteristicas = _normalizar_landmarks(resultado.multi_hand_landmarks[0])
         _asegurar_csv()
         with _lock_csv:
-            with open(RUTA_CSV, "a", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([clase] + caracteristicas)
-        count_actual += 1
+            # Re-verificar dentro del lock para evitar condicion de carrera
+            count_actual = _contar_muestras_clase(clase)
+            if count_actual < MUESTRAS_MAX:
+                with open(RUTA_CSV, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([clase] + caracteristicas)
+                count_actual += 1
 
     return jsonify({
         "detectado": True,
