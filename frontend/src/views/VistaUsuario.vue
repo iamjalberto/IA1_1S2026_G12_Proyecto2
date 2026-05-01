@@ -12,7 +12,12 @@
 
       <div class="camara-contenedor">
         <!-- La imagen apunta al stream MJPEG del backend via proxy Vite -->
-        <img src="/video_feed" alt="Stream de camara" class="camara-imagen" />
+        <!-- Se usa :src dinamico para que Vite no intente resolver la URL como modulo local -->
+        <img
+          :src="urlStreamCamara"
+          alt="Stream de camara"
+          class="camara-imagen"
+        />
         <div v-if="!estado.modelo_listo" class="camara-overlay">
           <p>Modelo no entrenado aun</p>
           <p
@@ -189,6 +194,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
+
+// URL del stream MJPEG — se define como variable para evitar que Vite lo resuelva como modulo local
+const urlStreamCamara = "/video_feed";
 
 // Estado de la camara (se actualiza cada 300ms con polling al backend)
 const estado = ref({
