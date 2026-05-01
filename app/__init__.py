@@ -1,3 +1,4 @@
+import os
 from flask import Flask
 from flask_cors import CORS
 from app.routes.main import main_bp
@@ -8,8 +9,11 @@ def crear_app() -> Flask:
     """Factory de la aplicacion Flask. Expone solo API REST, sin templates."""
     app = Flask(__name__)
 
+    # Clave secreta para firmar las sesiones de usuario (login admin)
+    app.secret_key = os.environ.get("SECRET_KEY", "handtalk-dev-secret-cambia-esto")
+
     # Habilitamos CORS para que el frontend Vite pueda hacer fetch sin restricciones
-    CORS(app)
+    CORS(app, supports_credentials=True)
 
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)

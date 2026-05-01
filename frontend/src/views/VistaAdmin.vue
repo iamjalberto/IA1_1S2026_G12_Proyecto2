@@ -1,192 +1,342 @@
 <template>
   <div class="vista-admin">
-    <div style="margin-bottom: 20px">
-      <h1 style="font-size: 22px; font-weight: 700">Panel de Administracion</h1>
-      <p style="color: var(--texto-suave); font-size: 14px; margin-top: 4px">
-        Configuracion y monitoreo del sistema HandTalk AI
-      </p>
-    </div>
-
-    <!-- Tabs de navegacion interna -->
-    <div class="tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        class="tab"
-        :class="{ 'tab--activa': tabActiva === tab.id }"
-        @click="tabActiva = tab.id"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
-
-    <!-- TAB: Configuracion -->
-    <div v-show="tabActiva === 'config'" class="card">
-      <h2 class="seccion-titulo">Parametros del sistema</h2>
+    <!-- Pantalla de login — se muestra si no hay sesion activa -->
+    <div
+      v-if="!autenticado"
+      class="card"
+      style="max-width: 360px; margin: 60px auto"
+    >
+      <h2 class="seccion-titulo">Acceso al panel</h2>
       <hr class="separador" />
-
       <div class="campo-grupo">
-        <label
-          >Umbral de confianza ({{
-            (config.umbral_confianza * 100).toFixed(0)
-          }}%)</label
-        >
+        <label>Usuario</label>
         <input
-          type="range"
-          min="0.3"
-          max="0.99"
-          step="0.01"
-          v-model.number="config.umbral_confianza"
-          style="width: 100%; accent-color: var(--azul)"
-        />
-        <p class="campo-hint">
-          Solo se aceptan predicciones con confianza mayor a este valor.
-        </p>
-      </div>
-
-      <div class="campo-grupo">
-        <label>Formato del mensaje de Telegram</label>
-        <textarea
-          v-model="config.formato_mensaje"
-          rows="3"
-          placeholder="Ej: Deteccion HandTalk AI: {sena} ({confianza})"
-        ></textarea>
-        <p class="campo-hint">
-          Usa {sena} y {confianza} como variables dinamicas.
-        </p>
-      </div>
-
-      <div class="campo-grupo">
-        <label>Chat ID de Telegram</label>
-        <input
+          v-model="loginForm.usuario"
+          class="input"
           type="text"
-          v-model="config.telegram_chat_id"
-          placeholder="-1001234567890"
+          placeholder="admin"
+          @keyup.enter="iniciarSesion"
         />
-        <p class="campo-hint">
-          ID del grupo o canal donde se enviaran los mensajes.
-        </p>
       </div>
-
       <div class="campo-grupo">
-        <label>Envio a Telegram</label>
-        <div class="toggle-fila">
-          <span>{{ config.telegram_activo ? "Activado" : "Desactivado" }}</span>
-          <button
-            class="toggle-btn"
-            :class="{ activo: config.telegram_activo }"
-            @click="config.telegram_activo = !config.telegram_activo"
-          >
-            <div class="toggle-circulo"></div>
-          </button>
-        </div>
+        <label>Contrasena</label>
+        <input
+          v-model="loginForm.contrasena"
+          class="input"
+          type="password"
+          placeholder="..."
+          @keyup.enter="iniciarSesion"
+        />
       </div>
-
-      <div class="campo-grupo">
-        <label>Historial de detecciones</label>
-        <div class="toggle-fila">
-          <span>{{
-            config.historial_habilitado ? "Habilitado" : "Deshabilitado"
-          }}</span>
-          <button
-            class="toggle-btn"
-            :class="{ activo: config.historial_habilitado }"
-            @click="config.historial_habilitado = !config.historial_habilitado"
-          >
-            <div class="toggle-circulo"></div>
-          </button>
-        </div>
-      </div>
-
-      <hr class="separador" />
-
-      <button class="btn btn-azul" :disabled="guardando" @click="guardarConfig">
-        {{ guardando ? "Guardando..." : "Guardar configuracion" }}
+      <p
+        v-if="loginError"
+        style="color: #e05252; font-size: 13px; margin-top: 6px"
+      >
+        {{ loginError }}
+      </p>
+      <button
+        class="btn btn--primario"
+        style="margin-top: 14px; width: 100%"
+        @click="iniciarSesion"
+      >
+        Ingresar
       </button>
     </div>
 
-    <!-- TAB: Metricas -->
-    <div v-show="tabActiva === 'metricas'" class="card">
+    <!-- Panel principal — solo visible cuando hay sesion -->
+    <template v-else>
       <div
         style="
+          margin-bottom: 20px;
           display: flex;
           justify-content: space-between;
-          align-items: center;
+          align-items: flex-start;
         "
       >
-        <h2 class="seccion-titulo">Metricas de desempeno</h2>
+        <div>
+          <h1 style="font-size: 22px; font-weight: 700">
+            Panel de Administracion
+          </h1>
+          <p
+            style="color: var(--texto-suave); font-size: 14px; margin-top: 4px"
+          >
+            Configuracion y monitoreo del sistema HandTalk AI
+          </p>
+        </div>
         <button
-          class="btn btn-gris"
-          style="padding: 6px 14px; font-size: 12px"
-          @click="cargarMetricas"
+          class="btn"
+          style="font-size: 13px; padding: 6px 14px"
+          @click="cerrarSesion"
         >
-          Actualizar
+          Cerrar sesion
         </button>
       </div>
-      <hr class="separador" />
 
-      <div class="metricas-grid">
-        <div class="metrica-card">
-          <div class="metrica-valor">{{ resumen.total_detecciones }}</div>
-          <div class="metrica-label">Total de detecciones</div>
+      <!-- Tabs de navegacion interna -->
+      <div class="tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          class="tab"
+          :class="{ 'tab--activa': tabActiva === tab.id }"
+          @click="tabActiva = tab.id"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <!-- TAB: Configuracion -->
+      <div v-show="tabActiva === 'config'" class="card">
+        <h2 class="seccion-titulo">Parametros del sistema</h2>
+        <hr class="separador" />
+
+        <div class="campo-grupo">
+          <label
+            >Umbral de confianza ({{
+              (config.umbral_confianza * 100).toFixed(0)
+            }}%)</label
+          >
+          <input
+            type="range"
+            min="0.3"
+            max="0.99"
+            step="0.01"
+            v-model.number="config.umbral_confianza"
+            style="width: 100%; accent-color: var(--azul)"
+          />
+          <p class="campo-hint">
+            Solo se aceptan predicciones con confianza mayor a este valor.
+          </p>
         </div>
-        <div class="metrica-card">
-          <div class="metrica-valor">{{ resumen.total_enviados_telegram }}</div>
-          <div class="metrica-label">Enviados a Telegram</div>
+
+        <div class="campo-grupo">
+          <label>Formato del mensaje de Telegram</label>
+          <textarea
+            v-model="config.formato_mensaje"
+            rows="3"
+            placeholder="Ej: Deteccion HandTalk AI: {sena} ({confianza})"
+          ></textarea>
+          <p class="campo-hint">
+            Usa {sena} y {confianza} como variables dinamicas.
+          </p>
         </div>
-        <div class="metrica-card">
-          <div class="metrica-valor">
-            {{ (resumen.confianza_promedio * 100).toFixed(1) }}%
+
+        <div class="campo-grupo">
+          <label>Chat ID de Telegram</label>
+          <input
+            type="text"
+            v-model="config.telegram_chat_id"
+            placeholder="-1001234567890"
+          />
+          <p class="campo-hint">
+            ID del grupo o canal donde se enviaran los mensajes.
+          </p>
+        </div>
+
+        <div class="campo-grupo">
+          <label>Envio a Telegram</label>
+          <div class="toggle-fila">
+            <span>{{
+              config.telegram_activo ? "Activado" : "Desactivado"
+            }}</span>
+            <button
+              class="toggle-btn"
+              :class="{ activo: config.telegram_activo }"
+              @click="config.telegram_activo = !config.telegram_activo"
+            >
+              <div class="toggle-circulo"></div>
+            </button>
           </div>
-          <div class="metrica-label">Confianza promedio</div>
         </div>
-        <div class="metrica-card">
-          <div class="metrica-valor">
-            {{ Object.keys(resumen.por_clase || {}).length }}
+
+        <div class="campo-grupo">
+          <label>Historial de detecciones</label>
+          <div class="toggle-fila">
+            <span>{{
+              config.historial_habilitado ? "Habilitado" : "Deshabilitado"
+            }}</span>
+            <button
+              class="toggle-btn"
+              :class="{ activo: config.historial_habilitado }"
+              @click="
+                config.historial_habilitado = !config.historial_habilitado
+              "
+            >
+              <div class="toggle-circulo"></div>
+            </button>
           </div>
-          <div class="metrica-label">Clases detectadas</div>
+        </div>
+
+        <hr class="separador" />
+
+        <button
+          class="btn btn-azul"
+          :disabled="guardando"
+          @click="guardarConfig"
+        >
+          {{ guardando ? "Guardando..." : "Guardar configuracion" }}
+        </button>
+      </div>
+
+      <!-- TAB: Metricas -->
+      <div v-show="tabActiva === 'metricas'" class="card">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h2 class="seccion-titulo">Metricas de desempeno</h2>
+          <button
+            class="btn btn-gris"
+            style="padding: 6px 14px; font-size: 12px"
+            @click="cargarMetricas"
+          >
+            Actualizar
+          </button>
+        </div>
+        <hr class="separador" />
+
+        <div class="metricas-grid">
+          <div class="metrica-card">
+            <div class="metrica-valor">{{ resumen.total_detecciones }}</div>
+            <div class="metrica-label">Total de detecciones</div>
+          </div>
+          <div class="metrica-card">
+            <div class="metrica-valor">
+              {{ resumen.total_enviados_telegram }}
+            </div>
+            <div class="metrica-label">Enviados a Telegram</div>
+          </div>
+          <div class="metrica-card">
+            <div class="metrica-valor">
+              {{ (resumen.confianza_promedio * 100).toFixed(1) }}%
+            </div>
+            <div class="metrica-label">Confianza promedio</div>
+          </div>
+          <div class="metrica-card">
+            <div class="metrica-valor">
+              {{ Object.keys(resumen.por_clase || {}).length }}
+            </div>
+            <div class="metrica-label">Clases detectadas</div>
+          </div>
+        </div>
+
+        <div
+          v-if="Object.keys(resumen.por_clase || {}).length > 0"
+          style="margin-top: 20px"
+        >
+          <h3
+            style="
+              font-size: 14px;
+              font-weight: 600;
+              margin-bottom: 12px;
+              color: var(--texto-suave);
+            "
+          >
+            Por clase
+          </h3>
+          <div class="tabla-contenedor">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Seña</th>
+                  <th>Detecciones</th>
+                  <th>Confianza prom.</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(datos, sena) in resumen.por_clase" :key="sena">
+                  <td>
+                    <span class="badge badge-azul">{{ sena }}</span>
+                  </td>
+                  <td>{{ datos.total }}</td>
+                  <td>
+                    <div class="barra-confianza" style="max-width: 120px">
+                      <div
+                        class="barra-confianza__relleno"
+                        :style="{ width: datos.confianza_promedio * 100 + '%' }"
+                      ></div>
+                    </div>
+                    <small
+                      >{{ (datos.confianza_promedio * 100).toFixed(1) }}%</small
+                    >
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div
+          v-else
+          style="color: var(--texto-suave); font-size: 14px; padding: 20px 0"
+        >
+          Todavia no hay detecciones registradas.
         </div>
       </div>
 
-      <div
-        v-if="Object.keys(resumen.por_clase || {}).length > 0"
-        style="margin-top: 20px"
-      >
-        <h3
+      <!-- TAB: Historial -->
+      <div v-show="tabActiva === 'historial'" class="card">
+        <div
           style="
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: var(--texto-suave);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
           "
         >
-          Por clase
-        </h3>
-        <div class="tabla-contenedor">
+          <h2 class="seccion-titulo">Historial de detecciones</h2>
+          <div style="display: flex; gap: 8px">
+            <button
+              class="btn btn-gris"
+              style="padding: 6px 14px; font-size: 12px"
+              @click="cargarHistorial"
+            >
+              Actualizar
+            </button>
+            <button
+              class="btn btn-rojo"
+              style="padding: 6px 14px; font-size: 12px"
+              @click="limpiarHistorial"
+            >
+              Limpiar
+            </button>
+          </div>
+        </div>
+        <hr class="separador" />
+
+        <div
+          v-if="historial.length === 0"
+          style="color: var(--texto-suave); font-size: 14px; padding: 20px 0"
+        >
+          No hay registros en el historial.
+        </div>
+
+        <div v-else class="tabla-contenedor">
           <table class="tabla">
             <thead>
               <tr>
+                <th>Fecha y hora</th>
                 <th>Seña</th>
-                <th>Detecciones</th>
-                <th>Confianza prom.</th>
+                <th>Confianza</th>
+                <th>Telegram</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(datos, sena) in resumen.por_clase" :key="sena">
-                <td>
-                  <span class="badge badge-azul">{{ sena }}</span>
+              <tr v-for="(reg, i) in historial" :key="i">
+                <td style="color: var(--texto-suave); font-size: 12px">
+                  {{ reg.timestamp }}
                 </td>
-                <td>{{ datos.total }}</td>
                 <td>
-                  <div class="barra-confianza" style="max-width: 120px">
-                    <div
-                      class="barra-confianza__relleno"
-                      :style="{ width: datos.confianza_promedio * 100 + '%' }"
-                    ></div>
-                  </div>
-                  <small
-                    >{{ (datos.confianza_promedio * 100).toFixed(1) }}%</small
+                  <span class="badge badge-azul">{{ reg.sena }}</span>
+                </td>
+                <td>{{ (reg.confianza * 100).toFixed(0) }}%</td>
+                <td>
+                  <span v-if="reg.enviado_telegram" class="badge badge-verde"
+                    >Si</span
                   >
+                  <span v-else class="badge badge-gris">No</span>
                 </td>
               </tr>
             </tbody>
@@ -194,128 +344,119 @@
         </div>
       </div>
 
-      <div
-        v-else
-        style="color: var(--texto-suave); font-size: 14px; padding: 20px 0"
-      >
-        Todavia no hay detecciones registradas.
-      </div>
-    </div>
+      <!-- TAB: Modelo -->
+      <div v-show="tabActiva === 'modelo'" class="card">
+        <h2 class="seccion-titulo">Informacion del modelo entrenado</h2>
+        <hr class="separador" />
 
-    <!-- TAB: Historial -->
-    <div v-show="tabActiva === 'historial'" class="card">
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        "
-      >
-        <h2 class="seccion-titulo">Historial de detecciones</h2>
-        <div style="display: flex; gap: 8px">
-          <button
-            class="btn btn-gris"
-            style="padding: 6px 14px; font-size: 12px"
-            @click="cargarHistorial"
+        <div
+          v-if="!reporteModelo.disponible"
+          style="color: var(--texto-suave); font-size: 14px; padding: 16px 0"
+        >
+          No hay modelo entrenado todavia. Ejecuta el script de entrenamiento
+          primero:
+          <br /><br />
+          <code
+            style="
+              background: #1a1d2a;
+              padding: 6px 12px;
+              border-radius: 6px;
+              font-size: 13px;
+            "
           >
-            Actualizar
-          </button>
-          <button
-            class="btn btn-rojo"
-            style="padding: 6px 14px; font-size: 12px"
-            @click="limpiarHistorial"
+            python scripts/entrenar_modelo.py
+          </code>
+        </div>
+
+        <div v-else>
+          <pre
+            style="
+              background: #1a1d2a;
+              padding: 16px;
+              border-radius: 8px;
+              font-size: 12px;
+              line-height: 1.6;
+              overflow-x: auto;
+              white-space: pre-wrap;
+              color: #c8d0e0;
+            "
+            >{{ reporteModelo.reporte }}</pre
           >
-            Limpiar
-          </button>
         </div>
       </div>
-      <hr class="separador" />
 
-      <div
-        v-if="historial.length === 0"
-        style="color: var(--texto-suave); font-size: 14px; padding: 20px 0"
-      >
-        No hay registros en el historial.
-      </div>
+      <!-- TAB: Senas -->
+      <div v-show="tabActiva === 'senas'" class="card">
+        <h2 class="seccion-titulo">Gestion de senas disponibles</h2>
+        <hr class="separador" />
 
-      <div v-else class="tabla-contenedor">
-        <table class="tabla">
-          <thead>
-            <tr>
-              <th>Fecha y hora</th>
-              <th>Seña</th>
-              <th>Confianza</th>
-              <th>Telegram</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(reg, i) in historial" :key="i">
-              <td style="color: var(--texto-suave); font-size: 12px">
-                {{ reg.timestamp }}
-              </td>
-              <td>
-                <span class="badge badge-azul">{{ reg.sena }}</span>
-              </td>
-              <td>{{ (reg.confianza * 100).toFixed(0) }}%</td>
-              <td>
-                <span v-if="reg.enviado_telegram" class="badge badge-verde"
-                  >Si</span
-                >
-                <span v-else class="badge badge-gris">No</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- TAB: Modelo -->
-    <div v-show="tabActiva === 'modelo'" class="card">
-      <h2 class="seccion-titulo">Informacion del modelo entrenado</h2>
-      <hr class="separador" />
-
-      <div
-        v-if="!reporteModelo.disponible"
-        style="color: var(--texto-suave); font-size: 14px; padding: 16px 0"
-      >
-        No hay modelo entrenado todavia. Ejecuta el script de entrenamiento
-        primero:
-        <br /><br />
-        <code
-          style="
-            background: #1a1d2a;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 13px;
-          "
+        <div
+          class="campo-grupo"
+          style="display: flex; gap: 10px; align-items: flex-end"
         >
-          python scripts/entrenar_modelo.py
-        </code>
+          <div style="flex: 1">
+            <label>Nueva sena (solo letras, numeros y guion bajo)</label>
+            <input
+              v-model="nuevaSena"
+              class="input"
+              type="text"
+              placeholder="ej: buenos_dias"
+              @keyup.enter="agregarSena"
+            />
+          </div>
+          <button class="btn btn--primario" @click="agregarSena">
+            Agregar
+          </button>
+        </div>
+
+        <div style="margin-top: 20px">
+          <p
+            style="
+              font-size: 13px;
+              color: var(--texto-suave);
+              margin-bottom: 10px;
+            "
+          >
+            Total: {{ senas.length }} senas registradas
+          </p>
+          <div
+            v-if="senas.length === 0"
+            style="color: var(--texto-suave); font-size: 14px"
+          >
+            No hay senas registradas.
+          </div>
+          <div
+            v-for="sena in senas"
+            :key="sena"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 10px 14px;
+              background: #1a1d2a;
+              border-radius: 8px;
+              margin-bottom: 8px;
+            "
+          >
+            <span style="font-size: 15px; font-weight: 500">{{ sena }}</span>
+            <button
+              class="btn"
+              style="font-size: 12px; padding: 4px 12px; color: #e05252"
+              @click="eliminarSena(sena)"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div v-else>
-        <pre
-          style="
-            background: #1a1d2a;
-            padding: 16px;
-            border-radius: 8px;
-            font-size: 12px;
-            line-height: 1.6;
-            overflow-x: auto;
-            white-space: pre-wrap;
-            color: #c8d0e0;
-          "
-          >{{ reporteModelo.reporte }}</pre
-        >
-      </div>
-    </div>
-
-    <!-- Toast -->
-    <Transition name="toast">
-      <div v-if="toast.visible" class="toast" :class="toast.tipo">
-        {{ toast.texto }}
-      </div>
-    </Transition>
+      <!-- Toast -->
+      <Transition name="toast">
+        <div v-if="toast.visible" class="toast" :class="toast.tipo">
+          {{ toast.texto }}
+        </div>
+      </Transition>
+    </template>
   </div>
 </template>
 
@@ -327,7 +468,15 @@ const tabs = [
   { id: "metricas", label: "Metricas" },
   { id: "historial", label: "Historial" },
   { id: "modelo", label: "Modelo" },
+  { id: "senas", label: "Senas" },
 ];
+
+const autenticado = ref(false);
+const loginForm = ref({ usuario: "", contrasena: "" });
+const loginError = ref("");
+
+const nuevaSena = ref("");
+const senas = ref([]);
 
 const tabActiva = ref("config");
 const guardando = ref(false);
@@ -362,7 +511,7 @@ function mostrarToast(texto, tipo = "exito") {
 
 async function cargarDatos() {
   try {
-    const res = await fetch("/admin/");
+    const res = await fetch("/admin/", { credentials: "include" });
     if (res.ok) {
       const data = await res.json();
       // Solo sobreescribimos los campos que vienen del servidor, preservando ediciones locales
@@ -376,7 +525,7 @@ async function cargarDatos() {
 
 async function cargarMetricas() {
   try {
-    const res = await fetch("/admin/metricas");
+    const res = await fetch("/admin/metricas", { credentials: "include" });
     if (res.ok) {
       resumen.value = await res.json();
     }
@@ -387,7 +536,9 @@ async function cargarMetricas() {
 
 async function cargarHistorial() {
   try {
-    const res = await fetch("/admin/historial?limite=100");
+    const res = await fetch("/admin/historial?limite=100", {
+      credentials: "include",
+    });
     if (res.ok) {
       historial.value = await res.json();
     }
@@ -402,6 +553,7 @@ async function guardarConfig() {
     const res = await fetch("/admin/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(config.value),
     });
     const data = await res.json();
@@ -420,7 +572,10 @@ async function guardarConfig() {
 async function limpiarHistorial() {
   if (!confirm("Seguro que quieres limpiar todo el historial?")) return;
   try {
-    await fetch("/admin/limpiar_historial", { method: "POST" });
+    await fetch("/admin/limpiar_historial", {
+      method: "POST",
+      credentials: "include",
+    });
     historial.value = [];
     resumen.value = {
       total_detecciones: 0,
@@ -436,7 +591,7 @@ async function limpiarHistorial() {
 
 async function cargarModeloInfo() {
   try {
-    const res = await fetch("/admin/modelo_info");
+    const res = await fetch("/admin/modelo_info", { credentials: "include" });
     if (res.ok) {
       reporteModelo.value = await res.json();
     }
@@ -445,10 +600,107 @@ async function cargarModeloInfo() {
   }
 }
 
-onMounted(() => {
-  cargarDatos();
-  cargarHistorial();
-  cargarModeloInfo();
+async function iniciarSesion() {
+  loginError.value = "";
+  try {
+    const res = await fetch("/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(loginForm.value),
+    });
+    const data = await res.json();
+    if (data.exito) {
+      autenticado.value = true;
+      cargarDatos();
+      cargarHistorial();
+      cargarModeloInfo();
+      cargarSenas();
+    } else {
+      loginError.value = data.mensaje || "Credenciales incorrectas";
+    }
+  } catch {
+    loginError.value = "Error de conexion con el servidor";
+  }
+}
+
+async function cerrarSesion() {
+  await fetch("/admin/logout", { method: "POST", credentials: "include" });
+  autenticado.value = false;
+  loginForm.value = { usuario: "", contrasena: "" };
+}
+
+async function cargarSenas() {
+  try {
+    const res = await fetch("/admin/senas", { credentials: "include" });
+    if (res.ok) {
+      const data = await res.json();
+      senas.value = data.senas;
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function agregarSena() {
+  const nombre = nuevaSena.value.trim();
+  if (!nombre) return;
+  try {
+    const res = await fetch("/admin/senas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ sena: nombre }),
+    });
+    const data = await res.json();
+    if (data.exito) {
+      senas.value = data.senas;
+      nuevaSena.value = "";
+      mostrarToast(`Sena '${nombre}' agregada`, "exito");
+    } else {
+      mostrarToast(data.mensaje, "error");
+    }
+  } catch {
+    mostrarToast("Error de conexion", "error");
+  }
+}
+
+async function eliminarSena(nombre) {
+  if (!confirm(`Eliminar la sena '${nombre}'?`)) return;
+  try {
+    const res = await fetch(`/admin/senas/${nombre}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (data.exito) {
+      senas.value = data.senas;
+      mostrarToast(`Sena '${nombre}' eliminada`, "exito");
+    } else {
+      mostrarToast(data.mensaje, "error");
+    }
+  } catch {
+    mostrarToast("Error de conexion", "error");
+  }
+}
+
+onMounted(async () => {
+  // Verificar si ya hay sesion activa (por si el usuario recarga la pagina)
+  try {
+    const res = await fetch("/admin/verificar", { credentials: "include" });
+    if (res.ok) {
+      const data = await res.json();
+      autenticado.value = data.autenticado;
+      if (autenticado.value) {
+        cargarDatos();
+        cargarHistorial();
+        cargarModeloInfo();
+        cargarSenas();
+      }
+    }
+  } catch {
+    /* sin conexion */
+  }
 });
 </script>
 
