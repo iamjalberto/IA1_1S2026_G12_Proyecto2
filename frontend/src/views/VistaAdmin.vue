@@ -580,7 +580,10 @@
                     v-model="camaraSeleccionada"
                     class="input"
                     style="font-size: 12px; padding: 4px 8px; height: auto"
+                    tabindex="-1"
                     @change="iniciarStream"
+                    @mousedown="$event.target.focus()"
+                    @blur.self="$event.target.blur()"
                   >
                     <option
                       v-for="cam in camarasDisponibles"
@@ -593,6 +596,7 @@
                   <button
                     class="btn"
                     style="font-size: 12px; padding: 4px 12px"
+                    tabindex="-1"
                     @click="cerrarCaptura"
                   >
                     Cerrar (ESC)
@@ -722,6 +726,7 @@
                     v-if="!capturaActiva"
                     class="btn btn--primario"
                     style="width: 100%; margin-bottom: 10px; padding: 12px"
+                    tabindex="-1"
                     @click="iniciarCaptura"
                     :disabled="conteoCaptura >= MUESTRAS_MAX"
                   >
@@ -741,6 +746,7 @@
                       color: #e0a052;
                       border-color: #e0a052;
                     "
+                    tabindex="-1"
                     @click="detenerCaptura"
                   >
                     Detener [Espacio]
@@ -1202,17 +1208,17 @@ async function listarCamaras() {
 function _instalarAtajosModal() {
   _desinstalarAtajosModal(); // evitar doble registro
   _teclaModalHandler = (e) => {
-    // No interceptar si el usuario esta escribiendo en un campo de formulario
-    if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      cerrarCaptura();
-    } else if (e.key === " ") {
-      // Prevent en fase de captura: impide que cualquier boton enfocado
-      // del modal reciba el espacio antes que nuestro handler
+    if (e.key === " ") {
+      // El espacio SIEMPRE inicia/detiene la captura, sin importar que elemento
+      // tenga el foco. El select de camara solo debe usarse con el mouse.
       e.preventDefault();
       e.stopImmediatePropagation();
       toggleCaptura();
+    } else if (e.key === "Escape") {
+      // Escape cierra el modal solo si el foco no esta en un campo de texto
+      if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+      e.preventDefault();
+      cerrarCaptura();
     }
   };
   window.addEventListener("keydown", _teclaModalHandler, { capture: true });
