@@ -19,9 +19,10 @@ _estado = {
 _estado_lock = threading.Lock()
 _hilo_activo = False
 
-# Indice de camara configurable por variable de entorno (default 0)
+# Indice de camara activo; se puede cambiar en tiempo real desde /api/cambiar_camara
 # En GCP no hay camara: el hilo simplemente no enviara frames
-CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))
+_camera_index = int(os.environ.get("CAMERA_INDEX", "0"))
+_lock_camara = threading.Lock()
 
 
 def _hilo_camara():
@@ -32,13 +33,16 @@ def _hilo_camara():
     """
     global _hilo_activo
 
-    cap = cv2.VideoCapture(CAMERA_INDEX)
+    with _lock_camara:
+        idx = _camera_index
+
+    cap = cv2.VideoCapture(idx)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     if not cap.isOpened():
         # Sin camara (servidor cloud) — no hay stream, pero el resto del sistema funciona
-        print(f"[INFO] Camara {CAMERA_INDEX} no disponible. El stream de video estara inactivo.")
+        print(f"[INFO] Camara {idx} no disponible. El stream de video estara inactivo.")
         _hilo_activo = False
         cap.release()
         return
@@ -101,6 +105,19 @@ def _hilo_camara():
 def iniciar_camara():
     """Inicia el hilo de captura. Se llama una sola vez al arrancar la app."""
     global _hilo_activo
+    _hilo_activo = True
+    hilo = threading.Thread(target=_hilo_camara, daemon=True)
+    hilo.start()
+
+
+def _reiniciar_camara(nuevo_indice: int):
+    """Detiene el hilo actual y arranca uno nuevo con el indice de camara indicado."""
+    global _hilo_activo, _camera_index
+    # Señalar al hilo actual que debe terminar
+    _hilo_activo = False
+    time.sleep(0.3)  # darle tiempo al hilo de salir del loop
+    with _lock_camara:
+        _camera_index = nuevo_indice
     _hilo_activo = True
     hilo = threading.Thread(target=_hilo_camara, daemon=True)
     hilo.start()
@@ -194,3 +211,32 @@ def enviar_telegram():
 def salud():
     """Health check para que Docker y el frontend sepan si el backend esta listo."""
     return jsonify({"estado": "ok", "modelo_listo": predictor.modelo_disponible()})
+
+
+@main_bp.route("/api/camaras")
+def listar_camaras():
+    """Enumera los indices de camara disponibles en el sistema (0..4)."""
+    disponibles = []
+    for i in range(5):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            disponibles.append({"indice": i, "nombre": f"Camara {i}"})
+            cap.release()
+        else:
+            cap.release()
+    with _lock_camara:
+        actual = _camera_index
+    return jsonify({"camaras": disponibles, "actual": actual})
+
+
+@main_bp.route("/api/cambiar_camara", methods=["POST"])
+def cambiar_camara():
+    """Cambia la camara activa y reinicia el hilo de captura."""
+    data = request.get_json() or {}
+    indice = data.get("indice")
+    if indice is None or not isinstance(indice, int):
+        return jsonify({"exito": False, "mensaje": "Indice invalido"}), 400
+    # Reiniciar en hilo separado para no bloquear la respuesta HTTP
+    t = threading.Thread(target=_reiniciar_camara, args=(indice,), daemon=True)
+    t.start()
+    return jsonify({"exito": True, "mensaje": f"Camara cambiada a indice {indice}"})

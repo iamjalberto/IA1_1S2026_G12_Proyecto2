@@ -4,10 +4,35 @@
     <section class="panel-camara card">
       <div class="panel-camara__header">
         <h2 class="panel-titulo">Camara en tiempo real</h2>
-        <span
-          class="punto-vivo"
-          :class="estado.mano_detectada ? 'verde' : 'gris'"
-        ></span>
+        <div style="display: flex; align-items: center; gap: 10px">
+          <!-- Selector de camara: solo se muestra si hay mas de una disponible -->
+          <select
+            v-if="camarasDisponibles.length > 1"
+            v-model="camaraSeleccionada"
+            style="
+              background: #1a1d2a;
+              border: 1px solid #2a2d3e;
+              color: #c8d0e0;
+              border-radius: 6px;
+              padding: 3px 8px;
+              font-size: 12px;
+              cursor: pointer;
+            "
+            @change="cambiarCamara"
+          >
+            <option
+              v-for="cam in camarasDisponibles"
+              :key="cam.indice"
+              :value="cam.indice"
+            >
+              {{ cam.nombre }}
+            </option>
+          </select>
+          <span
+            class="punto-vivo"
+            :class="estado.mano_detectada ? 'verde' : 'gris'"
+          ></span>
+        </div>
       </div>
 
       <div class="camara-contenedor">
@@ -196,7 +221,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 
 // URL del stream MJPEG — se define como variable para evitar que Vite lo resuelva como modulo local
-const urlStreamCamara = "/video_feed";
+const urlStreamCamara = ref("/video_feed");
 
 // Estado de la camara (se actualiza cada 300ms con polling al backend)
 const estado = ref({
@@ -205,6 +230,9 @@ const estado = ref({
   mano_detectada: false,
   modelo_listo: false,
 });
+
+const camarasDisponibles = ref([]);
+const camaraSeleccionada = ref(0);
 
 const senasCapturadas = ref([]);
 const senasDisponibles = ref([]);
@@ -235,6 +263,33 @@ async function obtenerEstado() {
     }
   } catch {
     // Silencioso si el backend no responde temporalmente
+  }
+}
+
+async function cargarCamaras() {
+  try {
+    const res = await fetch("/api/camaras");
+    if (res.ok) {
+      const data = await res.json();
+      camarasDisponibles.value = data.camaras;
+      camaraSeleccionada.value = data.actual;
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function cambiarCamara() {
+  try {
+    await fetch("/api/cambiar_camara", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ indice: camaraSeleccionada.value }),
+    });
+    // Forzar recarga del stream con un parametro de cache-busting
+    urlStreamCamara.value = "/video_feed?t=" + Date.now();
+  } catch {
+    /* no critico */
   }
 }
 
@@ -325,6 +380,7 @@ async function enviarTelegram() {
 onMounted(() => {
   cargarSenas();
   cargarConfig();
+  cargarCamaras();
   obtenerEstado();
   // Polling de estado cada 300ms para mostrar la prediccion en tiempo real
   intervaloPolling = setInterval(obtenerEstado, 300);
