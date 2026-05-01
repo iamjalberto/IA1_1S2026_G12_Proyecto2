@@ -53,9 +53,13 @@ def _hilo_camara():
             time.sleep(0.05)
             continue
 
-        # Espejamos el frame para que se vea como un espejo (mas natural para el usuario)
-        frame = cv2.flip(frame, 1)
+        # Los landmarks se extraen del frame SIN voltear, igual que durante el entrenamiento.
+        # El entrenamiento se hizo via browser: el canvas lee el video sin transformar
+        # (el CSS scaleX(-1) es solo visual). Aqui procesamos el frame natural y solo
+        # volteamos el frame_anotado para el stream (efecto espejo para el usuario).
         frame_anotado, caracteristicas = detector.procesar_frame(frame)
+        # Voltear el frame anotado para que el usuario vea efecto espejo
+        frame_anotado = cv2.flip(frame_anotado, 1)
 
         config = cargar_config()
         umbral = config.get("umbral_confianza", 0.70)
@@ -205,6 +209,12 @@ def enviar_telegram():
     exito, descripcion = telegram_bot.enviar_mensaje(mensaje, chat_id)
 
     return jsonify({"exito": exito, "mensaje": descripcion})
+
+
+@main_bp.route("/api/historial")
+def historial_publico():
+    """Retorna los ultimos 30 registros del historial de detecciones para la vista usuario."""
+    return jsonify({"historial": metricas.obtener_historial(30)})
 
 
 @main_bp.route("/api/salud")

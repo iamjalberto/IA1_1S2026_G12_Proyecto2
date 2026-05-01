@@ -13,6 +13,10 @@ services:
       - ./modelo:/app/modelo
       - ./logs:/app/logs
       - ./config:/app/config
+    environment:
+      # Deshabilitar el hilo de camara del servidor en Docker.
+      # En produccion/cloud el stream lo provee el navegador via getUserMedia.
+      - DISABLE_CAMERA=true
     env_file:
       - .env
     restart: unless-stopped

@@ -206,6 +206,73 @@
           </span>
         </div>
       </div>
+
+      <!-- Historial de detecciones -->
+      <div class="card" style="margin-top: 16px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+          "
+        >
+          <h2 class="panel-titulo">Historial de mensajes</h2>
+          <button
+            class="btn btn-gris"
+            style="padding: 4px 10px; font-size: 11px"
+            @click="cargarHistorial"
+          >
+            Actualizar
+          </button>
+        </div>
+        <div
+          v-if="historial.length === 0"
+          style="color: var(--texto-suave); font-size: 13px"
+        >
+          Sin detecciones registradas
+        </div>
+        <div v-else style="max-height: 220px; overflow-y: auto">
+          <table
+            style="width: 100%; border-collapse: collapse; font-size: 12px"
+          >
+            <thead>
+              <tr
+                style="
+                  color: var(--texto-suave);
+                  border-bottom: 1px solid #2a2d3e;
+                "
+              >
+                <th style="text-align: left; padding: 4px 6px">Hora</th>
+                <th style="text-align: left; padding: 4px 6px">Sena</th>
+                <th style="text-align: right; padding: 4px 6px">Conf.</th>
+                <th style="text-align: center; padding: 4px 6px">TG</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(r, i) in historial"
+                :key="i"
+                style="border-bottom: 1px solid #1a1d2a"
+              >
+                <td style="padding: 4px 6px; color: var(--texto-suave)">
+                  {{ r.timestamp.slice(11, 19) }}
+                </td>
+                <td style="padding: 4px 6px; font-weight: 600">{{ r.sena }}</td>
+                <td style="padding: 4px 6px; text-align: right">
+                  {{ (r.confianza * 100).toFixed(0) }}%
+                </td>
+                <td style="padding: 4px 6px; text-align: center">
+                  <span v-if="r.enviado_telegram" style="color: #00cc88"
+                    >&#10003;</span
+                  >
+                  <span v-else style="color: #444">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- Toast de notificacion -->
@@ -236,6 +303,7 @@ const camaraSeleccionada = ref(0);
 
 const senasCapturadas = ref([]);
 const senasDisponibles = ref([]);
+const historial = ref([]);
 const configTelegramActivo = ref(false);
 const enviandoTelegram = ref(false);
 const resultadoTelegram = ref(null);
@@ -299,6 +367,18 @@ async function cargarSenas() {
     if (res.ok) {
       const data = await res.json();
       senasDisponibles.value = data.senas;
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function cargarHistorial() {
+  try {
+    const res = await fetch("/api/historial");
+    if (res.ok) {
+      const data = await res.json();
+      historial.value = data.historial;
     }
   } catch {
     /* sin conexion */
@@ -381,6 +461,7 @@ onMounted(() => {
   cargarSenas();
   cargarConfig();
   cargarCamaras();
+  cargarHistorial();
   obtenerEstado();
   // Polling de estado cada 300ms para mostrar la prediccion en tiempo real
   intervaloPolling = setInterval(obtenerEstado, 300);
