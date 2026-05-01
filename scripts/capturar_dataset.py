@@ -1,11 +1,12 @@
 """
-Script para recolectar el dataset de señas de LENSEGUA.
+Script para recolectar el dataset de senas de LENSEGUA.
 Usa MediaPipe para detectar la mano y extrae 63 landmarks normalizados por captura.
 Los datos se guardan en dataset/dataset.csv.
 
 Controles:
-  [0-9]  Seleccionar la clase (seña) a capturar
-  ESPACIO Iniciar captura (grabara MUESTRAS_POR_CLASE frames automaticamente)
+  [0-9]   Seleccionar la clase (sena) a capturar
+  ESPACIO Iniciar captura automatica de MUESTRAS_POR_CLASE frames
+  C       Cambiar camara (cuando no esta grabando)
   Q       Salir
 """
 
@@ -19,21 +20,34 @@ import numpy as np
 
 # Las 10 senas de LENSEGUA que vamos a reconocer
 CLASES = [
-    "hola",      # mano extendida, palma al frente, dedos ligeramente abiertos
-    "si",        # pulgar arriba
-    "no",        # pulgar abajo
-    "tu",        # indice apuntando hacia la camara
-    "yo",        # indice apuntando al propio pecho
-    "excelente", # signo clasico de excelente
-    "te_amo",    # pulgar, indice y menique extendidos (ILY)
-    "igual",     # V inclinada horizontalmente
-    "nombre",    # letra N en LENSEGUA
-    "mucho",     # dedos juntos en punta
+    "hola",
+    "si",
+    "no",
+    "tu",
+    "yo",
+    "excelente",
+    "te_amo",
+    "igual",
+    "nombre",
+    "mucho",
 ]
 
-# Cuantas muestras capturar por clase en cada sesion de grabacion
-# El enunciado no especifica un minimo; con 100 se obtiene un modelo decente
-MUESTRAS_POR_CLASE = 100
+# Descripcion de como realizar cada sena — se muestra en pantalla durante la captura
+DESCRIPCIONES = {
+    "hola":      "Mano extendida, palma al frente, dedos ligeramente abiertos",
+    "si":        "Pulgar apuntando hacia arriba, demas dedos cerrados",
+    "no":        "Pulgar apuntando hacia abajo, demas dedos cerrados",
+    "tu":        "Indice extendido apuntando hacia la camara (hacia adelante)",
+    "yo":        "Indice extendido apuntando hacia tu propio pecho",
+    "excelente": "Signo clasico de excelente: pulgar e indice formando circulo",
+    "te_amo":    "Pulgar, indice y menique extendidos (signo ILY)",
+    "igual":     "Dos dedos (V) inclinados horizontalmente",
+    "nombre":    "Letra N del alfabeto LENSEGUA",
+    "mucho":     "Dedos juntos en punta (como gesto italiano de cantidad)",
+}
+
+# Cuantas muestras capturar por clase — 500 a ~10fps = ~50 segundos por sena
+MUESTRAS_POR_CLASE = 500
 
 # Ruta del CSV donde se acumula el dataset
 RUTA_CSV = os.path.normpath(
@@ -97,19 +111,78 @@ def detectar_camaras() -> list:
     return disponibles
 
 
+def seleccionar_camara(camaras: list) -> int:
+    """
+    Muestra una pantalla de seleccion de camara con preview en vivo.
+    El usuario presiona el numero de la camara que quiere usar y ENTER para confirmar.
+    Si solo hay una camara, la retorna directamente sin mostrar pantalla.
+    """
+    if len(camaras) == 1:
+        return camaras[0]
+
+    seleccion = camaras[0]
+    cap = cv2.VideoCapture(seleccion)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    print("\nVarias camaras detectadas. Selecciona una en la ventana de preview.")
+
+    while True:
+        ret, frame = cap.read()
+        if ret:
+            frame = cv2.flip(frame, 1)
+            h, w = frame.shape[:2]
+
+            # Overlay de seleccion
+            cv2.rectangle(frame, (0, 0), (w, 54), (10, 10, 30), -1)
+            cv2.putText(frame, "Seleccionar camara — presiona numero y ENTER para confirmar",
+                        (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (200, 200, 255), 1)
+            cv2.putText(frame, f"Camara actual: {seleccion}   |   Camaras disponibles: {camaras}",
+                        (10, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (150, 230, 150), 1)
+
+            y = 80
+            for i, cam in enumerate(camaras):
+                color = (0, 230, 255) if cam == seleccion else (120, 120, 120)
+                cv2.putText(frame, f"[{i}] Camara {cam}", (10, y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                y += 30
+
+            cv2.imshow("Seleccion de Camara - HandTalk AI", frame)
+
+        tecla = cv2.waitKey(1) & 0xFF
+        if tecla == 13:  # ENTER confirma
+            break
+        elif ord("0") <= tecla <= ord("9"):
+            idx = tecla - ord("0")
+            if idx < len(camaras) and camaras[idx] != seleccion:
+                seleccion = camaras[idx]
+                cap.release()
+                cap = cv2.VideoCapture(seleccion)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    cap.release()
+    cv2.destroyAllWindows()
+    return seleccion
+
+
 def main():
     inicializar_csv(RUTA_CSV)
 
     clase_actual = 0
     capturando = False
     frames_capturados = 0
+    # Guardamos solo 1 de cada 3 frames para capturar a ~10fps en lugar de 30fps.
+    # Asi cada muestra es visualmente diferente y el modelo aprende mas variacion.
+    CAPTURA_CADA_N_FRAMES = 3
+    frame_contador = 0
 
-    # Detectar camaras disponibles y arrancar en la primera
+    # Detectar camaras disponibles y dejar al usuario elegir
     camaras = detectar_camaras()
     if not camaras:
         print("ERROR: No se encontro ninguna camara disponible.")
         sys.exit(1)
-    indice_cam = camaras[0]
+    indice_cam = seleccionar_camara(camaras)
 
     cap = cv2.VideoCapture(indice_cam)
     if not cap.isOpened():
@@ -147,13 +220,14 @@ def main():
                 for mano_lm in resultado.multi_hand_landmarks:
                     mp_dibujo.draw_landmarks(frame, mano_lm, mp_manos.HAND_CONNECTIONS)
 
-                    # Guardar muestra si estamos en modo captura
+                    # Guardar muestra si estamos en modo captura, a ~10fps
                     if capturando and frames_capturados < MUESTRAS_POR_CLASE:
-                        caracteristicas = normalizar_landmarks(mano_lm)
-                        with open(RUTA_CSV, "a", newline="") as f:
-                            writer = csv.writer(f)
-                            writer.writerow([CLASES[clase_actual]] + caracteristicas)
-                        frames_capturados += 1
+                        if frame_contador % CAPTURA_CADA_N_FRAMES == 0:
+                            caracteristicas = normalizar_landmarks(mano_lm)
+                            with open(RUTA_CSV, "a", newline="") as f:
+                                writer = csv.writer(f)
+                                writer.writerow([CLASES[clase_actual]] + caracteristicas)
+                            frames_capturados += 1
 
                     if capturando and frames_capturados >= MUESTRAS_POR_CLASE:
                         capturando = False
@@ -176,23 +250,38 @@ def main():
                         cv2.FONT_HERSHEY_SIMPLEX, 0.48, (180, 255, 180), 1)
 
             # Panel lateral de informacion (debajo de la barra)
-            cv2.rectangle(frame, (0, 44), (310, 248), (15, 15, 15), -1)
+            cv2.rectangle(frame, (0, 44), (310, 270), (15, 15, 15), -1)
             cv2.putText(frame, f"Clase: {CLASES[clase_actual]}", (8, 72),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 230, 255), 2)
             cv2.putText(frame, f"Muestras: {conteo[CLASES[clase_actual]]}",
                         (8, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 220, 50), 2)
 
+            # Descripcion de como hacer la sena — se parte en dos lineas si es larga
+            desc = DESCRIPCIONES.get(CLASES[clase_actual], "")
+            palabras = desc.split()
+            linea1, linea2 = "", ""
+            for palabra in palabras:
+                if len(linea1) + len(palabra) < 32:
+                    linea1 += palabra + " "
+                else:
+                    linea2 += palabra + " "
+            cv2.putText(frame, linea1.strip(), (8, 122),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 200, 200), 1)
+            if linea2.strip():
+                cv2.putText(frame, linea2.strip(), (8, 140),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 200, 200), 1)
+
             if capturando:
                 # Borde verde cuando esta capturando
                 cv2.rectangle(frame, (2, 2), (w_f - 2, h_f - 2), (0, 220, 50), 4)
                 cv2.putText(frame, f"GRABANDO {frames_capturados}/{MUESTRAS_POR_CLASE}",
-                            (8, 126), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 50), 2)
+                            (8, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 50), 2)
             else:
                 cv2.putText(frame, "ESPACIO: capturar  Q: salir",
-                            (8, 126), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (160, 160, 160), 1)
+                            (8, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (160, 160, 160), 1)
 
             # Lista de clases con contador
-            y = 146
+            y = 180
             for i, clase in enumerate(CLASES):
                 color = (0, 230, 255) if i == clase_actual else (120, 120, 120)
                 cv2.putText(frame, f"[{i}] {clase}: {conteo[clase]}",
@@ -200,6 +289,7 @@ def main():
                 y += 17
 
             cv2.imshow("Captura de Dataset - HandTalk AI", frame)
+            frame_contador += 1
 
             tecla = cv2.waitKey(1) & 0xFF
 
