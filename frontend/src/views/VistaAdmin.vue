@@ -883,7 +883,9 @@ let intervalCaptura = null;
 // Intervalo de preview: activo siempre que el modal este abierto
 // independiente de si se esta guardando o no
 let intervalPreview = null;
-// Para calcular fps: contamos respuestas en ventanas de 1 segundo
+// Flag para no enviar un frame nuevo hasta recibir respuesta del anterior
+// Evita que los requests se acumulen si el backend tarda mas de 100ms
+let _frameEnVuelo = false;
 let _fpsContador = 0;
 let _fpsInterval = null;
 
@@ -1211,6 +1213,7 @@ function cerrarCaptura() {
   framesRecibidos.value = 0;
   fpsActual.value = 0;
   _fpsContador = 0;
+  _frameEnVuelo = false;
   if (streamCamara) {
     streamCamara.getTracks().forEach((t) => t.stop());
     streamCamara = null;
@@ -1244,6 +1247,9 @@ function detenerCaptura() {
 
 async function enviarFrame() {
   if (!videoRef.value || !claseCapturando.value) return;
+  // Si el request anterior todavia no respondio, no enviar otro
+  // Esto evita que los frames se acumulen cuando el backend es mas lento que el intervalo
+  if (_frameEnVuelo) return;
   if (capturaActiva.value && conteoCaptura.value >= MUESTRAS_MAX) {
     capturaActiva.value = false;
     progreso.value[claseCapturando.value] = MUESTRAS_MAX;
@@ -1251,19 +1257,18 @@ async function enviarFrame() {
     return;
   }
 
-  // Si el video todavia no tiene dimensiones, omitir este frame
-  const vw = videoRef.value.videoWidth;
-  const vh = videoRef.value.videoHeight;
-  if (!vw || !vh) return;
-
+  // Escalar el frame a 320x240 para reducir el payload sin perder informacion para MediaPipe
+  const ANCHO = 320;
+  const ALTO = 240;
   const canvas = document.createElement("canvas");
-  canvas.width = vw;
-  canvas.height = vh;
-  canvas.getContext("2d").drawImage(videoRef.value, 0, 0);
+  canvas.width = ANCHO;
+  canvas.height = ALTO;
+  canvas.getContext("2d").drawImage(videoRef.value, 0, 0, ANCHO, ALTO);
   const frame = canvas
-    .toDataURL("image/jpeg", 0.85)
+    .toDataURL("image/jpeg", 0.8)
     .replace(/^data:image\/jpeg;base64,/, "");
 
+  _frameEnVuelo = true;
   framesEnviados.value++;
   try {
     const res = await fetch("/admin/capturar_frame", {
@@ -1300,6 +1305,8 @@ async function enviarFrame() {
     }
   } catch {
     // Ignorar errores de red transitorios durante la captura
+  } finally {
+    _frameEnVuelo = false;
   }
 }
 

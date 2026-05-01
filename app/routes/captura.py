@@ -33,7 +33,7 @@ _mp_manos_mod = mp.solutions.hands
 _mp_dibujo = mp.solutions.drawing_utils
 _mp_estilos = mp.solutions.drawing_styles
 _detector = _mp_manos_mod.Hands(
-    static_image_mode=True,   # cada frame es independiente, mas robusto para JPEG del navegador
+    static_image_mode=False,  # modo tracking: mas rapido al procesar frames consecutivos
     max_num_hands=1,
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5,
@@ -41,6 +41,11 @@ _detector = _mp_manos_mod.Hands(
 
 # Lock para evitar escrituras concurrentes al CSV si llegan dos frames casi al mismo tiempo
 _lock_csv = threading.Lock()
+
+# Contador en memoria por clase para evitar leer el CSV completo en cada request.
+# Se inicializa al primer acceso y se actualiza con cada escritura.
+_contadores: dict[str, int] = {}
+_lock_contadores = threading.Lock()
 
 MUESTRAS_MAX = 500
 
@@ -60,16 +65,29 @@ def _normalizar_landmarks(hand_landmarks) -> list:
 
 
 def _contar_muestras_clase(clase: str) -> int:
-    if not os.path.exists(RUTA_CSV):
-        return 0
-    count = 0
-    with open(RUTA_CSV, "r") as f:
-        reader = csv.reader(f)
-        next(reader, None)
-        for row in reader:
-            if row and row[0] == clase:
-                count += 1
-    return count
+    """Cuenta muestras usando el cache en memoria; solo lee el CSV la primera vez."""
+    with _lock_contadores:
+        if clase not in _contadores:
+            # Primera vez: contar desde el CSV y cachear
+            if not os.path.exists(RUTA_CSV):
+                _contadores[clase] = 0
+            else:
+                count = 0
+                with open(RUTA_CSV, "r") as f:
+                    reader = csv.reader(f)
+                    next(reader, None)
+                    for row in reader:
+                        if row and row[0] == clase:
+                            count += 1
+                _contadores[clase] = count
+        return _contadores[clase]
+
+
+def _incrementar_contador(clase: str) -> int:
+    """Incrementa el contador en memoria y retorna el nuevo valor."""
+    with _lock_contadores:
+        _contadores[clase] = _contadores.get(clase, 0) + 1
+        return _contadores[clase]
 
 
 def _asegurar_csv() -> None:
@@ -151,13 +169,14 @@ def capturar_frame():
         caracteristicas = _normalizar_landmarks(resultado.multi_hand_landmarks[0])
         _asegurar_csv()
         with _lock_csv:
-            # Re-verificar dentro del lock para evitar condicion de carrera
-            count_actual = _contar_muestras_clase(clase)
-            if count_actual < MUESTRAS_MAX:
+            # Re-verificar con el contador en memoria dentro del lock
+            if _contadores.get(clase, 0) < MUESTRAS_MAX:
                 with open(RUTA_CSV, "a", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow([clase] + caracteristicas)
-                count_actual += 1
+                count_actual = _incrementar_contador(clase)
+            else:
+                count_actual = _contadores.get(clase, count_actual)
 
     return jsonify({
         "detectado": True,
@@ -201,5 +220,8 @@ def borrar_muestras(clase):
             writer = csv.writer(f)
             writer.writerow(encabezado)
             writer.writerows(resto)
+    # Resetear el contador en memoria para esta clase
+    with _lock_contadores:
+        _contadores[clase] = 0
 
     return jsonify({"exito": True, "count": 0})
