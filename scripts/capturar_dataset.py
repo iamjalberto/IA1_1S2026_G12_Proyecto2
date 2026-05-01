@@ -49,6 +49,14 @@ DESCRIPCIONES = {
 # Cuantas muestras capturar por clase — 500 a ~10fps = ~50 segundos por sena
 MUESTRAS_POR_CLASE = 500
 
+# Cuantas capturas de pantalla guardar por sena como evidencia de recoleccion
+EVIDENCIAS_POR_CLASE = 5
+
+# Carpeta donde se guardan las capturas de evidencia
+RUTA_EVIDENCIA = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "dataset", "evidencia")
+)
+
 # Ruta del CSV donde se acumula el dataset
 RUTA_CSV = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "dataset", "dataset.csv")
@@ -176,6 +184,9 @@ def main():
     # Asi cada muestra es visualmente diferente y el modelo aprende mas variacion.
     CAPTURA_CADA_N_FRAMES = 3
     frame_contador = 0
+    evidencias_guardadas = 0  # cuantas capturas de evidencia llevamos en esta clase
+
+    os.makedirs(RUTA_EVIDENCIA, exist_ok=True)
 
     # Detectar camaras disponibles y dejar al usuario elegir
     camaras = detectar_camaras()
@@ -233,6 +244,19 @@ def main():
                         capturando = False
                         print(f"  Clase '{CLASES[clase_actual]}': {frames_capturados} muestras guardadas.")
                     break
+
+            # Guardar capturas de evidencia en momentos distribuidos de la grabacion.
+            # Se toman en los puntos: 10%, 30%, 50%, 70%, 90% del total.
+            if capturando and evidencias_guardadas < EVIDENCIAS_POR_CLASE:
+                puntos = [int(MUESTRAS_POR_CLASE * p) for p in (0.10, 0.30, 0.50, 0.70, 0.90)]
+                if frames_capturados in puntos:
+                    nombre_archivo = (
+                        f"{CLASES[clase_actual]}_"
+                        f"{evidencias_guardadas + 1}de{EVIDENCIAS_POR_CLASE}.jpg"
+                    )
+                    ruta_img = os.path.join(RUTA_EVIDENCIA, nombre_archivo)
+                    cv2.imwrite(ruta_img, frame)
+                    evidencias_guardadas += 1
 
             h_f, w_f = frame.shape[:2]
 
@@ -301,6 +325,7 @@ def main():
                     clase_actual = idx
                     capturando = False
                     frames_capturados = 0
+                    evidencias_guardadas = 0
             elif tecla == ord("c") and len(camaras) > 1 and not capturando:
                 # Ciclar a la siguiente camara disponible
                 pos_actual = camaras.index(indice_cam)
@@ -313,6 +338,7 @@ def main():
             elif tecla == ord(" ") and not capturando:
                 capturando = True
                 frames_capturados = 0
+                evidencias_guardadas = 0
                 print(f"Capturando '{CLASES[clase_actual]}'...")
 
     cap.release()
