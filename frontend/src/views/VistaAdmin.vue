@@ -584,21 +584,25 @@
                   flex-wrap: wrap;
                 "
               >
-                <!-- Preview: muestra el frame anotado del servidor (con landmarks) -->
+                <!-- Preview de camara / frame anotado con landmarks -->
                 <div style="position: relative; flex-shrink: 0">
-                  <!-- Video oculto: solo sirve para capturar frames al canvas -->
+                  <!--
+                    Video directo: visible mientras el servidor no devuelva
+                    el primer frame anotado. Sirve ademas como fuente para
+                    el canvas que captura los frames que se envian al backend.
+                  -->
                   <video
                     ref="videoRef"
                     autoplay
                     playsinline
                     muted
-                    style="
-                      position: absolute;
-                      opacity: 0;
-                      pointer-events: none;
-                      width: 1px;
-                      height: 1px;
-                    "
+                    :style="{
+                      width: '320px',
+                      borderRadius: '10px',
+                      display: framePreview ? 'none' : 'block',
+                      background: '#000',
+                      border: '2px solid #2a2d3e',
+                    }"
                   ></video>
                   <!-- Imagen con el frame anotado por el backend (muestra landmarks) -->
                   <img
@@ -615,23 +619,6 @@
                       borderColor: deteccionActiva ? '#00ee55' : '#2a2d3e',
                     }"
                   />
-                  <div
-                    v-else
-                    style="
-                      width: 320px;
-                      height: 240px;
-                      border-radius: 10px;
-                      background: #0a0b14;
-                      border: 2px solid #2a2d3e;
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                      color: #555;
-                      font-size: 13px;
-                    "
-                  >
-                    Iniciando camara...
-                  </div>
                   <!-- Indicador de detección -->
                   <div
                     style="
