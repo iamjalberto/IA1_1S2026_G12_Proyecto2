@@ -34,8 +34,8 @@ _mp_dibujo = mp.solutions.drawing_utils
 _mp_estilos = mp.solutions.drawing_styles
 _detector = _mp_manos_mod.Hands(
     max_num_hands=1,
-    min_detection_confidence=0.7,
-    min_tracking_confidence=0.7,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5,
 )
 
 # Lock para evitar escrituras concurrentes al CSV si llegan dos frames casi al mismo tiempo

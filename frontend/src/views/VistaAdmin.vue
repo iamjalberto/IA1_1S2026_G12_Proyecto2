@@ -1109,9 +1109,15 @@ async function enviarFrame() {
     return;
   }
 
+  // Si el video todavia no cargó las dimensiones, omitir este frame
+  // para no enviar un canvas vacio que MediaPipe no puede procesar
+  const vw = videoRef.value.videoWidth;
+  const vh = videoRef.value.videoHeight;
+  if (!vw || !vh || videoRef.value.readyState < 2) return;
+
   const canvas = document.createElement("canvas");
-  canvas.width = videoRef.value.videoWidth || 320;
-  canvas.height = videoRef.value.videoHeight || 240;
+  canvas.width = vw;
+  canvas.height = vh;
   canvas.getContext("2d").drawImage(videoRef.value, 0, 0);
   const frame = canvas
     .toDataURL("image/jpeg", 0.7)
