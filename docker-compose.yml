@@ -21,19 +21,12 @@ services:
       - .env
     restart: unless-stopped
 
-  # Frontend: Vue 3 con Vite en modo desarrollo
+  # Frontend: Vue 3 compilado y servido por Nginx
   frontend:
     build: ./frontend
     container_name: handtalk_frontend
     ports:
-      - "5173:5173"
-    volumes:
-      # Montamos el codigo para hot reload sin reconstruir la imagen
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      # Le decimos a Vite donde esta el backend para configurar el proxy
-      - BACKEND_TARGET=http://backend:5000
+      - "80:80"
     depends_on:
       - backend
     restart: unless-stopped

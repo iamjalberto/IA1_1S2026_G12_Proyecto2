@@ -1,15 +1,23 @@
-FROM node:22-alpine
+# Etapa 1: construir los archivos estaticos con Vite
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copiar manifesto e instalar dependencias primero (mejor cache de Docker)
 COPY package.json ./
 RUN npm install
 
-# Copiar el resto del codigo fuente
 COPY . .
+RUN npm run build
 
-EXPOSE 5173
+# Etapa 2: servir el build con Nginx
+FROM nginx:alpine
 
-# Vite dev server con hot reload, escucha en todas las interfaces
-CMD ["npm", "run", "dev"]
+# Copiar la configuracion de Nginx (proxy al backend + archivos estaticos)
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copiar los archivos del build de Vite
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
