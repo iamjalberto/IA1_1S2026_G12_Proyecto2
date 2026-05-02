@@ -5,29 +5,6 @@
       <div class="panel-camara__header">
         <h2 class="panel-titulo">Camara en tiempo real</h2>
         <div style="display: flex; align-items: center; gap: 10px">
-          <!-- Selector de camara: solo se muestra si hay mas de una disponible -->
-          <select
-            v-if="camarasDisponibles.length > 1"
-            v-model="camaraSeleccionada"
-            style="
-              background: #1a1d2a;
-              border: 1px solid #2a2d3e;
-              color: #c8d0e0;
-              border-radius: 6px;
-              padding: 3px 8px;
-              font-size: 12px;
-              cursor: pointer;
-            "
-            @change="cambiarCamara"
-          >
-            <option
-              v-for="cam in camarasDisponibles"
-              :key="cam.indice"
-              :value="cam.indice"
-            >
-              {{ cam.nombre }}
-            </option>
-          </select>
           <span
             class="punto-vivo"
             :class="estado.mano_detectada ? 'verde' : 'gris'"
@@ -35,21 +12,29 @@
         </div>
       </div>
 
-      <div class="camara-contenedor">
-        <!-- La imagen apunta al stream MJPEG del backend via proxy Vite -->
-        <!-- Se usa :src dinamico para que Vite no intente resolver la URL como modulo local -->
-        <img
-          :src="urlStreamCamara"
-          alt="Stream de camara"
-          class="camara-imagen"
-        />
-        <div v-if="!estado.modelo_listo" class="camara-overlay">
-          <p>Modelo no entrenado aun</p>
-          <p
-            style="font-size: 12px; color: var(--texto-suave); margin-top: 6px"
+      <div class="camara-contenedor" style="position: relative">
+        <!-- Video oculto: fuente de la camara del navegador -->
+        <video
+          ref="videoRef"
+          autoplay
+          playsinline
+          muted
+          style="display: none"
+        ></video>
+        <!-- Canvas donde se dibuja el frame anotado devuelto por el backend -->
+        <canvas ref="canvasRef" class="camara-imagen"></canvas>
+        <div v-if="!camaraActiva" class="camara-overlay">
+          <p>Camara no iniciada</p>
+          <button
+            class="btn btn-primario"
+            style="margin-top: 10px"
+            @click="iniciarCamara"
           >
-            Ejecuta el script de entrenamiento primero
-          </p>
+            Activar camara
+          </button>
+        </div>
+        <div v-else-if="!estado.modelo_listo" class="camara-overlay">
+          <p>Modelo no entrenado aun</p>
         </div>
       </div>
 
@@ -287,10 +272,14 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 
-// URL del stream MJPEG — se define como variable para evitar que Vite lo resuelva como modulo local
-const urlStreamCamara = ref("/video_feed");
+// Referencias al video y canvas para la camara del navegador
+const videoRef = ref(null);
+const canvasRef = ref(null);
+const camaraActiva = ref(false);
+let streamCamara = null;
+let intervaloDeteccion = null;
 
-// Estado de la camara (se actualiza cada 300ms con polling al backend)
+// Estado de la camara (se actualiza con cada respuesta de /api/predecir_frame)
 const estado = ref({
   sena_actual: null,
   confianza_actual: 0,
@@ -309,7 +298,6 @@ const enviandoTelegram = ref(false);
 const resultadoTelegram = ref(null);
 
 const toast = ref({ visible: false, texto: "", tipo: "exito" });
-let intervaloPolling = null;
 
 // Construye el texto del mensaje a partir de las senas capturadas
 const mensajeTexto = computed(() => {
@@ -323,41 +311,62 @@ function mostrarToast(texto, tipo = "exito") {
   }, 3000);
 }
 
-async function obtenerEstado() {
+async function iniciarCamara() {
   try {
-    const res = await fetch("/api/estado");
-    if (res.ok) {
-      estado.value = await res.json();
-    }
-  } catch {
-    // Silencioso si el backend no responde temporalmente
+    streamCamara = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: "user" },
+      audio: false,
+    });
+    videoRef.value.srcObject = streamCamara;
+    await videoRef.value.play();
+    camaraActiva.value = true;
+    // Ajustar el canvas al tamaño del video
+    canvasRef.value.width = 640;
+    canvasRef.value.height = 480;
+    // Iniciar el ciclo de deteccion cada 150ms
+    intervaloDeteccion = setInterval(enviarFrameAlBackend, 150);
+  } catch (e) {
+    console.error("No se pudo acceder a la camara:", e);
   }
 }
 
-async function cargarCamaras() {
+async function enviarFrameAlBackend() {
+  if (!videoRef.value || !canvasRef.value || !camaraActiva.value) return;
+  const ctx = canvasRef.value.getContext("2d");
+  // Dibujar frame actual del video en el canvas (espejado para el usuario)
+  ctx.save();
+  ctx.translate(640, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(videoRef.value, 0, 0, 640, 480);
+  ctx.restore();
+  const frameB64 = canvasRef.value.toDataURL("image/jpeg", 0.7);
   try {
-    const res = await fetch("/api/camaras");
-    if (res.ok) {
-      const data = await res.json();
-      camarasDisponibles.value = data.camaras;
-      camaraSeleccionada.value = data.actual;
-    }
-  } catch {
-    /* sin conexion */
-  }
-}
-
-async function cambiarCamara() {
-  try {
-    await fetch("/api/cambiar_camara", {
+    const res = await fetch("/api/predecir_frame", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ indice: camaraSeleccionada.value }),
+      body: JSON.stringify({ frame: frameB64 }),
     });
-    // Forzar recarga del stream con un parametro de cache-busting
-    urlStreamCamara.value = "/video_feed?t=" + Date.now();
+    if (!res.ok) return;
+    const data = await res.json();
+    // Actualizar el estado con la prediccion recibida
+    estado.value.sena_actual = data.sena ?? null;
+    estado.value.confianza_actual = data.confianza ?? 0;
+    estado.value.mano_detectada = data.mano_detectada ?? false;
+    estado.value.modelo_listo = true;
+    // Dibujar el frame anotado devuelto por el backend
+    if (data.frame_anotado) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.save();
+        ctx.translate(640, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0, 640, 480);
+        ctx.restore();
+      };
+      img.src = data.frame_anotado;
+    }
   } catch {
-    /* no critico */
+    /* fallo de red, continuar */
   }
 }
 
@@ -460,15 +469,16 @@ async function enviarTelegram() {
 onMounted(() => {
   cargarSenas();
   cargarConfig();
-  cargarCamaras();
   cargarHistorial();
-  obtenerEstado();
-  // Polling de estado cada 300ms para mostrar la prediccion en tiempo real
-  intervaloPolling = setInterval(obtenerEstado, 300);
+  // Iniciar la camara del navegador automaticamente
+  iniciarCamara();
 });
 
 onUnmounted(() => {
-  clearInterval(intervaloPolling);
+  clearInterval(intervaloDeteccion);
+  if (streamCamara) {
+    streamCamara.getTracks().forEach((t) => t.stop());
+  }
 });
 </script>
 

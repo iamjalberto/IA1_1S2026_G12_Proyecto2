@@ -1,7 +1,9 @@
+import base64
 import os
 import threading
 import time
 import cv2
+import numpy as np
 from flask import Blueprint, Response, jsonify, request
 from app.services import detector, predictor
 from app.services import telegram_bot, metricas
@@ -213,6 +215,60 @@ def enviar_telegram():
 def historial_publico():
     """Retorna los ultimos 30 registros del historial de detecciones para la vista usuario."""
     return jsonify({"historial": metricas.obtener_historial(30)})
+
+
+@main_bp.route("/api/predecir_frame", methods=["POST"])
+def predecir_frame():
+    """
+    Recibe un frame JPEG en base64 desde el navegador, lo procesa con MediaPipe
+    y devuelve la prediccion + el frame anotado en base64.
+    Usado en produccion donde el servidor no tiene camara fisica.
+    """
+    data = request.get_json(silent=True) or {}
+    imagen_b64 = data.get("frame", "")
+    if not imagen_b64:
+        return jsonify({"exito": False, "mensaje": "Sin frame"}), 400
+
+    # Decodificar base64 a numpy array
+    try:
+        header, encoded = imagen_b64.split(",", 1) if "," in imagen_b64 else ("", imagen_b64)
+        img_bytes = base64.b64decode(encoded)
+        arr = np.frombuffer(img_bytes, dtype=np.uint8)
+        frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame_bgr is None:
+            raise ValueError("Frame invalido")
+    except Exception:
+        return jsonify({"exito": False, "mensaje": "Frame invalido"}), 400
+
+    frame_anotado, caracteristicas = detector.procesar_frame(frame_bgr)
+
+    sena = None
+    confianza = 0.0
+    mano_detectada = caracteristicas is not None
+
+    if mano_detectada and predictor.modelo_disponible():
+        sena, confianza = predictor.predecir(caracteristicas)
+        config = cargar_config()
+        if confianza < config.get("umbral_confianza", 0.70):
+            sena = None
+
+        # Actualizar el estado global para que /api/estado siga funcionando
+        with _estado_lock:
+            _estado["sena_actual"] = sena
+            _estado["confianza_actual"] = confianza
+            _estado["mano_detectada"] = mano_detectada
+
+    # Codificar frame anotado en JPEG base64 para enviarlo al navegador
+    _, buf = cv2.imencode(".jpg", frame_anotado, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    frame_b64 = "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
+
+    return jsonify({
+        "exito": True,
+        "sena": sena,
+        "confianza": round(confianza, 4),
+        "mano_detectada": mano_detectada,
+        "frame_anotado": frame_b64,
+    })
 
 
 @main_bp.route("/api/salud")
