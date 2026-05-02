@@ -114,10 +114,14 @@
           <textarea
             v-model="config.formato_mensaje"
             rows="3"
-            placeholder="Ej: Deteccion HandTalk AI: {sena} ({confianza})"
+            placeholder="Ej: Deteccion HandTalk AI:\nSena: {sena}\nConfianza: {confianza:.0%}"
           ></textarea>
           <p class="campo-hint">
-            Usa {sena} y {confianza} como variables dinamicas.
+            Variables disponibles para personalizar el mensaje:
+            <br><code>{sena}</code> — nombre de la seña detectada (ej: <em>hola</em>)
+            <br><code>{confianza}</code> — nivel de confianza en decimal (ej: <em>0.97</em>)
+            <br><code>{confianza:.0%}</code> — confianza en porcentaje (ej: <em>97%</em>)
+            <br>El mensaje final incluye automaticamente el detalle de todas las senas capturadas.
           </p>
         </div>
 
