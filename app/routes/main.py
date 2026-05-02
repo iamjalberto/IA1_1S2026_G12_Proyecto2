@@ -193,9 +193,10 @@ def registrar_sena():
 
 @main_bp.route("/api/enviar_telegram", methods=["POST"])
 def enviar_telegram():
-    """Envia el mensaje acumulado al bot de Telegram."""
+    """Envia el mensaje acumulado al bot de Telegram con formato legible."""
     data = request.get_json() or {}
     mensaje = data.get("mensaje", "").strip()
+    senas = data.get("senas", [])  # lista de {sena, confianza}
 
     if not mensaje:
         return jsonify({"exito": False, "mensaje": "El mensaje no puede estar vacio"}), 400
@@ -205,8 +206,21 @@ def enviar_telegram():
     if not config.get("telegram_activo", False):
         return jsonify({"exito": False, "mensaje": "El envio a Telegram esta desactivado en el panel admin"}), 400
 
+    # Construir un mensaje HTML bien formateado para Telegram
+    lineas = ["<b>HandTalk AI — Mensaje detectado</b>", ""]
+    lineas.append(f"<b>Mensaje:</b> {mensaje}")
+    if senas:
+        lineas.append("")
+        lineas.append("<b>Detalle por seña:</b>")
+        for item in senas:
+            sena = item.get("sena", "?")
+            conf = float(item.get("confianza", 0))
+            lineas.append(f"  • {sena} — {conf*100:.0f}% confianza")
+
+    texto_final = "\n".join(lineas)
+
     chat_id = config.get("telegram_chat_id", "")
-    exito, descripcion = telegram_bot.enviar_mensaje(mensaje, chat_id)
+    exito, descripcion = telegram_bot.enviar_mensaje(texto_final, chat_id)
 
     return jsonify({"exito": exito, "mensaje": descripcion})
 

@@ -472,7 +472,10 @@ async function enviarTelegram() {
     const res = await fetch("/api/enviar_telegram", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mensaje: mensajeTexto.value }),
+      body: JSON.stringify({
+        mensaje: mensajeTexto.value,
+        senas: senasCapturadas.value,
+      }),
     });
 
     const data = await res.json();
