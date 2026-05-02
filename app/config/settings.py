@@ -9,8 +9,8 @@ RUTA_CONFIG = os.path.normpath(RUTA_CONFIG)
 CONFIG_DEFAULT = {
     "umbral_confianza": 0.70,
     "senas_disponibles": [
-        "hola", "gracias", "si", "no", "ayuda",
-        "agua", "bien", "mal", "por_favor", "casa"
+        "excelente", "hola", "igual", "mucho", "no",
+        "nombre", "si", "te_amo", "tu", "yo"
     ],
     "senas_descripciones": {},
     "formato_mensaje": "Deteccion HandTalk AI:\nSena: {sena}\nConfianza: {confianza:.0%}",
