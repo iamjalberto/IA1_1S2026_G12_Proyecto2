@@ -133,6 +133,43 @@ def bot_info():
     return jsonify({"configurado": False, "username": None})
 
 
+@admin_bp.route("/detectar_chat_id")
+@requiere_login
+def detectar_chat_id():
+    """
+    Consulta el ultimo mensaje recibido por el bot y devuelve el chat_id
+    del remitente. El usuario debe haber enviado un mensaje al bot antes de llamar.
+    """
+    token = os.environ.get("TELEGRAM_TOKEN", "")
+    if not token or token == "tu_token_aqui":
+        return jsonify({"exito": False, "mensaje": "Token de Telegram no configurado"})
+    try:
+        resp = http_requests.get(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            params={"limit": 1, "offset": -1},
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            return jsonify({"exito": False, "mensaje": "Error al consultar Telegram"})
+        updates = resp.json().get("result", [])
+        if not updates:
+            return jsonify({"exito": False, "mensaje": "No se recibio ningun mensaje aun. Envia un mensaje al bot primero."})
+        mensaje = updates[-1]
+        # Puede venir de un mensaje directo o de un canal/grupo
+        chat = (
+            mensaje.get("message", {}).get("chat")
+            or mensaje.get("channel_post", {}).get("chat")
+            or {}
+        )
+        chat_id = chat.get("id")
+        nombre = chat.get("first_name") or chat.get("title") or str(chat_id)
+        if not chat_id:
+            return jsonify({"exito": False, "mensaje": "No se pudo obtener el Chat ID"})
+        return jsonify({"exito": True, "chat_id": str(chat_id), "nombre": nombre})
+    except Exception as e:
+        return jsonify({"exito": False, "mensaje": f"Error: {str(e)}"})
+
+
 @admin_bp.route("/historial")
 @requiere_login
 def ver_historial():

@@ -128,14 +128,32 @@
 
         <div class="campo-grupo">
           <label>Chat ID de Telegram</label>
-          <input
-            type="text"
-            v-model="config.telegram_chat_id"
-            placeholder="-1001234567890"
-          />
-          <p class="campo-hint">
-            ID del grupo o canal donde se enviaran los mensajes. Para obtener tu
-            ID personal, abre el bot y envia <code>/start</code>.
+          <div style="display: flex; gap: 8px; align-items: center">
+            <input
+              type="text"
+              v-model="config.telegram_chat_id"
+              placeholder="Usa el boton para detectarlo automaticamente"
+              style="flex: 1"
+            />
+            <button
+              class="btn btn-gris"
+              style="white-space: nowrap; padding: 6px 12px; font-size: 12px"
+              :disabled="detectandoChatId"
+              @click="detectarChatId"
+            >
+              {{ detectandoChatId ? "Detectando..." : "Detectar" }}
+            </button>
+          </div>
+          <p
+            v-if="mensajeDeteccion"
+            class="campo-hint"
+            :style="{ color: mensajeDeteccion.exito ? '#00cc88' : '#ff6b6b' }"
+          >
+            {{ mensajeDeteccion.texto }}
+          </p>
+          <p v-else class="campo-hint">
+            Envia cualquier mensaje al bot en Telegram y luego haz clic en
+            <strong>Detectar</strong> para rellenar el Chat ID automaticamente.
           </p>
         </div>
 
@@ -926,6 +944,8 @@ const tabs = [
 
 const autenticado = ref(false);
 const botUsername = ref(null);
+const detectandoChatId = ref(false);
+const mensajeDeteccion = ref(null);
 const loginForm = ref({ usuario: "", contrasena: "" });
 const loginError = ref("");
 
@@ -1023,6 +1043,33 @@ async function cargarBotInfo() {
     }
   } catch {
     /* sin conexion */
+  }
+}
+
+async function detectarChatId() {
+  detectandoChatId.value = true;
+  mensajeDeteccion.value = null;
+  try {
+    const res = await fetch("/admin/detectar_chat_id", {
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (data.exito) {
+      config.value.telegram_chat_id = data.chat_id;
+      mensajeDeteccion.value = {
+        exito: true,
+        texto: `Chat ID detectado: ${data.chat_id} (${data.nombre})`,
+      };
+    } else {
+      mensajeDeteccion.value = { exito: false, texto: data.mensaje };
+    }
+  } catch {
+    mensajeDeteccion.value = {
+      exito: false,
+      texto: "Error de conexion con el backend",
+    };
+  } finally {
+    detectandoChatId.value = false;
   }
 }
 
