@@ -127,64 +127,6 @@
         </div>
 
         <div class="campo-grupo">
-          <label>Chat ID de Telegram</label>
-          <div style="display: flex; gap: 8px; align-items: center">
-            <input
-              type="text"
-              v-model="config.telegram_chat_id"
-              placeholder="Usa el boton para detectarlo automaticamente"
-              style="flex: 1"
-            />
-            <button
-              class="btn btn-gris"
-              style="white-space: nowrap; padding: 6px 12px; font-size: 12px"
-              :disabled="detectandoChatId"
-              @click="detectarChatId"
-            >
-              {{ detectandoChatId ? "Detectando..." : "Detectar" }}
-            </button>
-          </div>
-          <p
-            v-if="mensajeDeteccion"
-            class="campo-hint"
-            :style="{ color: mensajeDeteccion.exito ? '#00cc88' : '#ff6b6b' }"
-          >
-            {{ mensajeDeteccion.texto }}
-          </p>
-          <p v-else class="campo-hint">
-            Envia cualquier mensaje al bot en Telegram y luego haz clic en
-            <strong>Detectar</strong> para rellenar el Chat ID automaticamente.
-          </p>
-        </div>
-
-        <!-- QR del bot: solo si el token esta configurado -->
-        <div v-if="botUsername" class="campo-grupo" style="text-align: center">
-          <label>Abrir bot en Telegram</label>
-          <p class="campo-hint" style="margin-bottom: 8px">
-            Escanea el codigo QR o haz clic en el enlace para abrir
-            <strong>@{{ botUsername }}</strong> y obtener tu Chat ID.
-          </p>
-          <img
-            :src="`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https://t.me/${botUsername}&bgcolor=1a1d2a&color=c8d0e0&margin=10`"
-            alt="QR del bot de Telegram"
-            style="border-radius: 8px; width: 160px; height: 160px"
-          />
-          <br />
-          <a
-            :href="`https://t.me/${botUsername}`"
-            target="_blank"
-            style="
-              font-size: 13px;
-              color: var(--azul);
-              margin-top: 6px;
-              display: inline-block;
-            "
-          >
-            https://t.me/{{ botUsername }}
-          </a>
-        </div>
-
-        <div class="campo-grupo">
           <label>Envio a Telegram</label>
           <div class="toggle-fila">
             <span>{{
@@ -943,9 +885,6 @@ const tabs = [
 ];
 
 const autenticado = ref(false);
-const botUsername = ref(null);
-const detectandoChatId = ref(false);
-const mensajeDeteccion = ref(null);
 const loginForm = ref({ usuario: "", contrasena: "" });
 const loginError = ref("");
 
@@ -991,7 +930,6 @@ const config = ref({
   formato_mensaje:
     "Deteccion HandTalk AI:\nSena: {sena}\nConfianza: {confianza}",
   telegram_activo: false,
-  telegram_chat_id: "",
   historial_habilitado: true,
 });
 
@@ -1031,45 +969,6 @@ async function cargarDatos() {
     }
   } catch {
     /* sin conexion */
-  }
-}
-
-async function cargarBotInfo() {
-  try {
-    const res = await fetch("/admin/bot_info", { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      botUsername.value = data.configurado ? data.username : null;
-    }
-  } catch {
-    /* sin conexion */
-  }
-}
-
-async function detectarChatId() {
-  detectandoChatId.value = true;
-  mensajeDeteccion.value = null;
-  try {
-    const res = await fetch("/admin/detectar_chat_id", {
-      credentials: "include",
-    });
-    const data = await res.json();
-    if (data.exito) {
-      config.value.telegram_chat_id = data.chat_id;
-      mensajeDeteccion.value = {
-        exito: true,
-        texto: `Chat ID detectado: ${data.chat_id} (${data.nombre})`,
-      };
-    } else {
-      mensajeDeteccion.value = { exito: false, texto: data.mensaje };
-    }
-  } catch {
-    mensajeDeteccion.value = {
-      exito: false,
-      texto: "Error de conexion con el backend",
-    };
-  } finally {
-    detectandoChatId.value = false;
   }
 }
 
@@ -1572,7 +1471,6 @@ onMounted(async () => {
         cargarModeloInfo();
         cargarSenas();
         cargarProgreso();
-        cargarBotInfo();
       }
     }
   } catch {

@@ -187,9 +187,33 @@
 
       <!-- Envio a Telegram -->
       <div class="card">
-        <h2 class="panel-titulo" style="margin-bottom: 14px">
-          Enviar a Telegram
-        </h2>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+          "
+        >
+          <h2 class="panel-titulo">Enviar a Telegram</h2>
+          <button
+            class="btn btn-gris"
+            style="padding: 5px 10px; font-size: 12px"
+            @click="abrirModalTelegram"
+          >
+            Configurar
+          </button>
+        </div>
+
+        <div v-if="usuarioConectado" style="margin-bottom: 12px">
+          <span class="badge badge-verde"
+            >Conectado como {{ usuarioConectado }}</span
+          >
+        </div>
+        <div v-else class="alerta-info" style="margin-bottom: 12px">
+          No estas conectado. Haz clic en <strong>Configurar</strong> para
+          registrarte.
+        </div>
 
         <div v-if="!configTelegramActivo" class="alerta-info">
           El envio a Telegram esta desactivado. Activalo en el Panel Admin.
@@ -198,7 +222,11 @@
         <button
           class="btn btn-azul"
           style="width: 100%; justify-content: center; padding: 12px"
-          :disabled="senasCapturadas.length === 0 || enviandoTelegram"
+          :disabled="
+            senasCapturadas.length === 0 ||
+            enviandoTelegram ||
+            !usuarioConectado
+          "
           @click="enviarTelegram"
         >
           <span v-if="enviandoTelegram">Enviando...</span>
@@ -239,6 +267,119 @@
         </button>
       </div>
     </section>
+
+    <!-- Modal de configuracion de Telegram -->
+    <Transition name="fade">
+      <div
+        v-if="modalTelegram"
+        class="modal-overlay"
+        @click.self="modalTelegram = false"
+      >
+        <div class="modal-caja">
+          <div class="modal-header">
+            <h2 class="panel-titulo">Configurar Telegram</h2>
+            <button
+              class="btn btn-gris"
+              style="padding: 4px 10px; font-size: 11px"
+              @click="modalTelegram = false"
+            >
+              Cerrar
+            </button>
+          </div>
+
+          <!-- Estado actual de conexion -->
+          <div
+            v-if="usuarioConectado"
+            style="
+              margin-top: 14px;
+              margin-bottom: 8px;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            "
+          >
+            <span class="badge badge-verde"
+              >Conectado como {{ usuarioConectado }}</span
+            >
+            <button
+              class="btn btn-gris"
+              style="padding: 4px 10px; font-size: 12px"
+              @click="desconectarTelegram"
+            >
+              Desconectar
+            </button>
+          </div>
+
+          <!-- Instrucciones con QR -->
+          <div v-if="botUsername" style="margin-top: 16px; text-align: center">
+            <p style="font-size: 13px; margin-bottom: 8px">
+              Primero escribe este comando al bot
+              <a
+                :href="'https://t.me/' + botUsername"
+                target="_blank"
+                style="color: var(--azul)"
+              >
+                @{{ botUsername }} </a
+              >:
+            </p>
+            <div
+              style="
+                background: #13151f;
+                border: 1px solid #2a2d3e;
+                border-radius: 6px;
+                padding: 10px 16px;
+                font-family: monospace;
+                font-size: 15px;
+                display: inline-block;
+                margin-bottom: 14px;
+              "
+            >
+              /registrar {{ usuarioInput || "tu_nombre" }}
+            </div>
+            <br />
+            <img
+              :src="`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://t.me/${botUsername}&bgcolor=1a1d2a&color=c8d0e0&margin=10`"
+              alt="QR del bot"
+              style="border-radius: 8px; width: 140px; height: 140px"
+            />
+          </div>
+
+          <!-- Formulario de registro -->
+          <div class="campo-grupo" style="margin-top: 18px">
+            <label>Tu nombre de usuario</label>
+            <div style="display: flex; gap: 8px">
+              <input
+                v-model="usuarioInput"
+                type="text"
+                placeholder="Ej: jose"
+                style="flex: 1"
+                @keyup.enter="registrarTelegram"
+              />
+              <button
+                class="btn btn-azul"
+                style="white-space: nowrap; padding: 6px 14px"
+                :disabled="registrandoTelegram || !usuarioInput.trim()"
+                @click="registrarTelegram"
+              >
+                {{ registrandoTelegram ? "Registrando..." : "Registrar" }}
+              </button>
+            </div>
+            <p
+              v-if="mensajeRegistro"
+              class="campo-hint"
+              :style="{ color: mensajeRegistro.exito ? '#00cc88' : '#ff6b6b' }"
+            >
+              {{ mensajeRegistro.texto }}
+            </p>
+            <p v-else class="campo-hint">
+              Envia primero el comando al bot, luego escribe tu nombre aqui y
+              presiona
+              <strong>Registrar</strong>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Modal de historial -->
     <Transition name="fade">
@@ -350,6 +491,15 @@ const modalHistorial = ref(false);
 const configTelegramActivo = ref(false);
 const enviandoTelegram = ref(false);
 const resultadoTelegram = ref(null);
+
+// Estado del modal de configuracion de Telegram
+const modalTelegram = ref(false);
+const usuarioInput = ref("");
+const registrandoTelegram = ref(false);
+const mensajeRegistro = ref(null);
+const botUsername = ref(null);
+// El nombre del usuario conectado se persiste en localStorage para sobrevivir recargas
+const usuarioConectado = ref(localStorage.getItem("handtalk_usuario") || "");
 
 const toast = ref({ visible: false, texto: "", tipo: "exito" });
 
@@ -528,6 +678,77 @@ async function cargarConfig() {
   }
 }
 
+async function cargarBotUsername() {
+  try {
+    const res = await fetch("/api/bot_username");
+    if (res.ok) {
+      const data = await res.json();
+      botUsername.value = data.configurado ? data.username : null;
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+function abrirModalTelegram() {
+  mensajeRegistro.value = null;
+  if (usuarioConectado.value) {
+    usuarioInput.value = usuarioConectado.value;
+  }
+  modalTelegram.value = true;
+}
+
+async function registrarTelegram() {
+  const nombre = usuarioInput.value.trim().toLowerCase();
+  if (!nombre) return;
+  registrandoTelegram.value = true;
+  mensajeRegistro.value = null;
+  try {
+    const res = await fetch("/api/registrar_usuario", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre }),
+    });
+    const data = await res.json();
+    if (data.exito) {
+      usuarioConectado.value = nombre;
+      localStorage.setItem("handtalk_usuario", nombre);
+      mensajeRegistro.value = {
+        exito: true,
+        texto: `Registrado correctamente como "${nombre}"`,
+      };
+      mostrarToast(`Conectado como ${nombre}`, "exito");
+    } else {
+      mensajeRegistro.value = { exito: false, texto: data.mensaje };
+    }
+  } catch {
+    mensajeRegistro.value = {
+      exito: false,
+      texto: "Error de conexion con el backend",
+    };
+  } finally {
+    registrandoTelegram.value = false;
+  }
+}
+
+async function desconectarTelegram() {
+  const nombre = usuarioConectado.value;
+  if (!nombre) return;
+  try {
+    await fetch("/api/desconectar_usuario", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre }),
+    });
+  } catch {
+    /* no es critico si falla, igual limpiamos localmente */
+  }
+  usuarioConectado.value = "";
+  localStorage.removeItem("handtalk_usuario");
+  mensajeRegistro.value = null;
+  mostrarToast("Desconectado de Telegram", "exito");
+}
+
 async function capturarSena() {
   const { sena_actual, confianza_actual } = estado.value;
   if (!sena_actual) return;
@@ -561,7 +782,7 @@ function limpiarMensaje() {
 }
 
 async function enviarTelegram() {
-  if (senasCapturadas.value.length === 0) return;
+  if (senasCapturadas.value.length === 0 || !usuarioConectado.value) return;
   enviandoTelegram.value = true;
   resultadoTelegram.value = null;
 
@@ -570,6 +791,7 @@ async function enviarTelegram() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        nombre: usuarioConectado.value,
         mensaje: mensajeTexto.value,
         senas: senasCapturadas.value,
       }),
@@ -605,6 +827,7 @@ function manejarTecla(e) {
 onMounted(() => {
   cargarSenas();
   cargarConfig();
+  cargarBotUsername();
   // El historial se carga al abrir el modal, no al montar
   iniciarCamara();
   window.addEventListener("keydown", manejarTecla);

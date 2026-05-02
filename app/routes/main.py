@@ -4,9 +4,10 @@ import threading
 import time
 import cv2
 import numpy as np
+import requests as http_requests
 from flask import Blueprint, Response, jsonify, request
 from app.services import detector, predictor
-from app.services import telegram_bot, metricas
+from app.services import telegram_bot, metricas, usuarios_bot
 from app.config.settings import cargar_config
 
 main_bp = Blueprint("main", __name__)
@@ -219,7 +220,14 @@ def enviar_telegram():
 
     texto_final = "\n".join(lineas)
 
-    chat_id = config.get("telegram_chat_id", "")
+    nombre = data.get("nombre", "").strip().lower()
+    if not nombre:
+        return jsonify({"exito": False, "mensaje": "Debes registrarte en Telegram primero"}), 400
+
+    chat_id = usuarios_bot.obtener_chat_id(nombre)
+    if not chat_id:
+        return jsonify({"exito": False, "mensaje": f"El usuario '{nombre}' no esta registrado. Escribe /registrar {nombre} al bot primero."}), 400
+
     exito, descripcion = telegram_bot.enviar_mensaje(texto_final, chat_id)
 
     return jsonify({"exito": exito, "mensaje": descripcion})
@@ -283,6 +291,82 @@ def predecir_frame():
         "mano_detectada": mano_detectada,
         "frame_anotado": frame_b64,
     })
+
+
+@main_bp.route("/api/bot_username")
+def bot_username_publico():
+    """Retorna el username del bot de Telegram. Endpoint publico para el modulo de usuario."""
+    token = os.environ.get("TELEGRAM_TOKEN", "")
+    if not token or token == "tu_token_aqui":
+        return jsonify({"configurado": False, "username": None})
+    try:
+        resp = http_requests.get(
+            f"https://api.telegram.org/bot{token}/getMe", timeout=5
+        )
+        if resp.status_code == 200:
+            datos = resp.json().get("result", {})
+            return jsonify({"configurado": True, "username": datos.get("username")})
+    except Exception:
+        pass
+    return jsonify({"configurado": False, "username": None})
+
+
+@main_bp.route("/api/registrar_usuario", methods=["POST"])
+def registrar_usuario():
+    """
+    Busca en los ultimos mensajes del bot el comando '/registrar <nombre>'
+    enviado por el usuario y guarda su chat_id en usuarios_bot.json.
+    """
+    data = request.get_json() or {}
+    nombre = data.get("nombre", "").strip().lower()
+    if not nombre:
+        return jsonify({"exito": False, "mensaje": "Nombre vacio"}), 400
+
+    token = os.environ.get("TELEGRAM_TOKEN", "")
+    if not token or token == "tu_token_aqui":
+        return jsonify({"exito": False, "mensaje": "Token de Telegram no configurado"})
+
+    try:
+        resp = http_requests.get(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            params={"limit": 100, "offset": -100},
+            timeout=8,
+        )
+        if resp.status_code != 200:
+            return jsonify({"exito": False, "mensaje": "Error al consultar Telegram"})
+
+        updates = resp.json().get("result", [])
+        # Buscar el comando /registrar <nombre> en los mensajes mas recientes
+        for update in reversed(updates):
+            msg = update.get("message", {})
+            texto = (msg.get("text") or "").strip().lower()
+            # Aceptar tanto '/registrar nombre' como '/registrar@botname nombre'
+            partes = texto.split()
+            if len(partes) >= 2 and partes[0].startswith("/registrar") and partes[1] == nombre:
+                chat_id = str(msg.get("chat", {}).get("id", ""))
+                if chat_id:
+                    usuarios_bot.registrar(nombre, chat_id)
+                    return jsonify({"exito": True, "chat_id": chat_id})
+
+        return jsonify({
+            "exito": False,
+            "mensaje": f"No se encontro el comando /registrar {nombre}. Asegurate de haberlo enviado al bot."
+        })
+    except Exception as e:
+        return jsonify({"exito": False, "mensaje": f"Error: {str(e)}"})
+
+
+@main_bp.route("/api/desconectar_usuario", methods=["POST"])
+def desconectar_usuario():
+    """Elimina el registro de un usuario para que deje de recibir mensajes."""
+    data = request.get_json() or {}
+    nombre = data.get("nombre", "").strip().lower()
+    if not nombre:
+        return jsonify({"exito": False, "mensaje": "Nombre vacio"}), 400
+    eliminado = usuarios_bot.eliminar(nombre)
+    if eliminado:
+        return jsonify({"exito": True, "mensaje": f"Usuario '{nombre}' desconectado"})
+    return jsonify({"exito": False, "mensaje": f"El usuario '{nombre}' no estaba registrado"})
 
 
 @main_bp.route("/api/salud")
