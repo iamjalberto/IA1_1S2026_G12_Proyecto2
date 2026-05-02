@@ -1,307 +1,256 @@
-# Manual de Usuario - HandTalk AI
+# Manual de Usuario — HandTalk AI
 
-**Proyecto 2 - Inteligencia Artificial 1**  
-**Universidad San Carlos de Guatemala - Facultad de Ingenieria**  
+**Proyecto 2 — Inteligencia Artificial 1**
+**Universidad San Carlos de Guatemala — Facultad de Ingenieria**
 **Grupo 12 | Jose Alberto Alarcon Chigua | 201346084**
 
 ---
 
 ## Que es HandTalk AI?
 
-HandTalk AI es un sistema que reconoce senas del lenguaje de senas LENSEGUA en tiempo real usando tu camara web. Coloca tu mano frente a la camara, realiza una sena, y el sistema la identifica automaticamente. Luego puedes enviar el mensaje detectado a un grupo de Telegram.
+HandTalk AI es un sistema que reconoce senas del lenguaje LENSEGUA en tiempo real usando la camara web. Coloca tu mano frente a la camara, realiza una de las senas disponibles, y el sistema la identifica automaticamente mostrando el resultado en pantalla. Luego puedes enviar el mensaje detectado a un grupo de Telegram con un solo clic.
 
 ---
 
-## Requisitos antes de comenzar
+## Requisitos
 
 - Computadora con camara web
-- Python 3.10 o superior instalado
-- Node.js 18 o superior instalado
+- Docker instalado (`docker compose` disponible)
 - Conexion a internet (para el bot de Telegram)
+- Navegador web moderno (Chrome o Firefox recomendado)
 
 ---
 
-## Parte 1: Instalacion del sistema
+## Instalacion con Docker (recomendada)
 
 ### Paso 1: Clonar el repositorio
-
-Abre una terminal y ejecuta:
 
 ```bash
 git clone https://github.com/iamjalberto/IA1_1S2026_G12_Proyecto2
 cd IA1_1S2026_G12_Proyecto2/HandTalkAI
 ```
 
-### Paso 2: Crear el entorno virtual de Python
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-> En Windows usar: `.venv\Scripts\activate`
-
-### Paso 3: Instalar dependencias Python
-
-```bash
-pip install -r requirements.txt
-```
-
-### Paso 4: Configurar el token de Telegram
+### Paso 2: Configurar variables de entorno
 
 ```bash
 cp .env.example .env
 ```
 
-El archivo `.env` ya viene configurado con el token del bot del proyecto. No necesitas modificarlo a menos que uses un bot diferente.
+El archivo `.env` ya incluye el token del bot del proyecto. No es necesario modificarlo a menos que uses un bot diferente.
 
-### Paso 5: Instalar dependencias del frontend
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
----
-
-## Parte 2: Preparar el modelo (primera vez)
-
-Antes de usar el sistema necesitas grabar el dataset y entrenar el modelo. Este proceso se hace una sola vez.
-
-### Paso 1: Grabar el dataset
+### Paso 3: Levantar el sistema
 
 ```bash
-python scripts/capturar_dataset.py
+docker compose up --build
 ```
 
-Aparecera una ventana con la imagen de tu camara. Los controles son:
+La primera vez tarda unos minutos mientras descarga las imagenes. Las veces siguientes es mas rapido.
 
-| Tecla | Accion |
-|-------|--------|
-| `0` al `9` | Selecciona la sena a grabar (ver lista abajo) |
-| `ESPACIO` | Inicia la grabacion automatica de 100 muestras |
-| `C` | Cambia de camara (si tienes varias) |
-| `Q` | Cierra el programa |
-
-**Lista de senas disponibles:**
-
-| Numero | Sena |
-|--------|------|
-| 0 | hola |
-| 1 | gracias |
-| 2 | si |
-| 3 | no |
-| 4 | ayuda |
-| 5 | agua |
-| 6 | bien |
-| 7 | mal |
-| 8 | por_favor |
-| 9 | casa |
-
-**Como grabar bien las senas:**
-1. Presiona el numero de la sena que quieres grabar
-2. Coloca tu mano frente a la camara haciendo la sena
-3. Presiona `ESPACIO` — el sistema grabara 100 fotos automaticamente
-4. Repite para todas las senas
-
-> Consejo: Varía un poco la posicion de la mano mientras graba (un poco arriba, un poco abajo, girada). Esto hace que el modelo sea mas robusto.
-
-### Paso 2: Entrenar el modelo
-
-```bash
-python scripts/entrenar_modelo.py
-```
-
-El script prueba 4 algoritmos de Machine Learning y selecciona el mejor automaticamente. Al terminar muestra el accuracy obtenido y guarda:
-- `modelo/model.pkl`
-- `modelo/label_encoder.pkl`
-- `modelo/reporte_metricas.txt`
-
----
-
-## Parte 3: Usar el sistema
-
-### Paso 1: Iniciar el backend
-
-Abre una terminal y ejecuta:
-
-```bash
-source .venv/bin/activate
-python main.py
-```
-
-Debes ver:
-```
-* Running on http://0.0.0.0:5000
-```
-
-### Paso 2: Iniciar el frontend
-
-Abre **otra terminal** y ejecuta:
-
-```bash
-cd frontend
-npm run dev
-```
-
-Debes ver:
-```
-  VITE ready in ...
-  Local: http://localhost:5173/
-```
-
-### Paso 3: Abrir la aplicacion
+### Paso 4: Abrir la aplicacion
 
 Abre tu navegador y entra a: **http://localhost:5173**
 
 ---
 
-## Parte 4: Usar la interfaz
+## Pantalla principal — Vista de usuario
 
-### Vista principal (Detector)
+Al abrir la aplicacion veras la pantalla principal con tres secciones:
 
-Al abrir la aplicacion veras dos paneles:
+### Panel izquierdo — Camara en vivo
 
-**Panel izquierdo — Camara en tiempo real:**
-- Muestra el video de tu camara con la mano detectada
-- El punto de color en la esquina indica si hay mano detectada (verde) o no (gris)
-- Debajo del video aparece la sena detectada y el porcentaje de confianza
+- Muestra el video de la camara con los landmarks de la mano detectados
+- El sistema detecta automaticamente si hay una mano en el cuadro
+- Si detecta una sena, la muestra en la parte inferior del video con el porcentaje de confianza
 
-**Panel derecho — Capturar sena:**
+### Panel central — Deteccion
 
-1. Coloca tu mano frente a la camara y realiza una sena
-2. Espera a que el sistema detecte la sena (aparece en el panel izquierdo)
-3. Haz clic en **"Capturar sena"** para agregarla al mensaje
-4. Puedes capturar varias senas seguidas para formar un mensaje
-5. El mensaje acumulado aparece en el area de texto
-6. Cuando el mensaje este listo, haz clic en **"Enviar a Telegram"**
+Aqui se muestra en grande la sena que el sistema esta detectando en este momento, junto con su nivel de confianza (0% a 100%).
 
-> Para que el envio a Telegram funcione, primero debes configurarlo en el Panel Admin (ver Parte 5).
+Cuando el nivel de confianza supere el umbral configurado (por defecto 70%), la sena se muestra claramente. Si la confianza es baja, el sistema muestra "Analizando...".
 
-**Botones disponibles:**
-- **Capturar sena**: Agrega la sena actual al mensaje
-- **Limpiar**: Borra el mensaje acumulado
-- **Enviar a Telegram**: Envia el mensaje al grupo de Telegram configurado
+**Como usar el detector:**
+
+1. Coloca tu mano derecha frente a la camara
+2. Realiza una de las senas disponibles (ver lista abajo)
+3. Mantente a una distancia de 30 a 60 cm de la camara
+4. El sistema detecta la sena automaticamente
+
+### Panel derecho — Acciones
+
+- **Enviar a Telegram**: Envia la sena detectada actualmente al grupo de Telegram configurado
+- **Historial**: Muestra las ultimas detecciones realizadas (hora, sena, confianza)
+- **Lista de senas**: Muestra todas las senas que el sistema puede reconocer con su descripcion
 
 ---
 
-### Vista de administracion (Panel Admin)
+## Senas disponibles
 
-Para acceder al Panel Admin haz clic en **"Panel Admin"** en la barra de navegacion, o entra a **http://localhost:5173/#/admin**.
+| Sena | Como hacerla |
+|------|-------------|
+| **hola** | Abre la mano con los 5 dedos extendidos y agitala de un lado a otro a la altura del hombro |
+| **si** | Cierra la mano en puno y muevela arriba y abajo, como asintiendo |
+| **no** | Extiende el indice y el medio juntos y muevelos de un lado a otro horizontalmente |
+| **tu** | Extiende el indice y apunta directamente hacia adelante |
+| **yo** | Extiende el indice y apunta hacia tu propio pecho |
+| **excelente** | Extiende el pulgar hacia arriba con el resto de dedos cerrados (thumbs up) |
+| **te_amo** | Extiende el pulgar, el indice y el menique al mismo tiempo, manteniendo el medio y el anular doblados |
+| **igual** | Extiende el indice y el medio en forma de V (signo de la paz) apuntando hacia adelante |
+| **nombre** | Forma una N con la mano tocando los dos primeros nudillos contra la frente |
+| **mucho** | Junta las dos manos frente al pecho y separalas hacia los lados, indicando amplitud |
 
-El panel tiene 4 pestanas:
+> El sistema funciona con cualquier mano (derecha o izquierda).
 
-#### Pestana "Configuracion"
+---
 
-Aqui puedes ajustar:
+## Enviar un mensaje a Telegram
 
-- **Umbral de confianza**: Que tan seguro debe estar el sistema antes de mostrar una prediccion (deslizador). Valor recomendado: 70%.
-- **Formato del mensaje de Telegram**: Como se formateara el mensaje enviado. Puedes usar `{sena}` y `{confianza}` como variables.
-- **Chat ID de Telegram**: El ID del grupo de Telegram donde se enviaran los mensajes.
-- **Envio a Telegram**: Activa o desactiva el envio.
-- **Guardar cambios**: Aplica la configuracion.
+Para que el envio funcione, el bot debe estar configurado en el Panel Admin (ver seccion siguiente). Una vez configurado:
 
-#### Pestana "Metricas"
+1. Realiza una sena frente a la camara
+2. Espera a que el sistema la detecte con confianza alta
+3. Haz clic en **"Enviar a Telegram"**
+4. El mensaje llegara al grupo de Telegram configurado
 
-Muestra estadisticas del uso del sistema:
+El formato del mensaje enviado es:
+```
+Deteccion HandTalk AI:
+Sena: hola
+Confianza: 95%
+```
+
+---
+
+## Panel de Administracion
+
+Para acceder al panel de administracion, haz clic en **"Admin"** en la barra de navegacion superior o entra a `http://localhost:5173/#/admin`.
+
+**Credenciales por defecto:**
+- Usuario: `admin`
+- Contrasena: `handtalk2026`
+
+### Configuracion del sistema
+
+Desde la pestana "Configuracion" puedes ajustar:
+
+| Opcion | Descripcion | Valor recomendado |
+|--------|-------------|-------------------|
+| Umbral de confianza | Confianza minima para mostrar una prediccion | 70% |
+| Formato del mensaje | Como se formatea el mensaje de Telegram | (predefinido) |
+| Chat ID de Telegram | ID del grupo donde se enviaran los mensajes | (el de tu grupo) |
+| Bot de Telegram activo | Activa o desactiva el envio | Activado |
+
+Despues de cambiar valores, haz clic en **"Guardar cambios"**.
+
+### Metricas de uso
+
+Muestra estadisticas del sistema:
 - Total de detecciones realizadas
-- Cuantos mensajes se enviaron a Telegram
+- Mensajes enviados a Telegram
 - Confianza promedio
-- Detecciones por clase
+- Detecciones por sena
 
-#### Pestana "Historial"
+### Historial
 
-Muestra las ultimas 100 detecciones con timestamp, sena detectada y nivel de confianza. Puedes limpiar el historial con el boton correspondiente.
+Lista de las detecciones recientes con hora, sena detectada, confianza y si se envio a Telegram. Se puede limpiar desde este panel.
 
-#### Pestana "Modelo"
+### Modelo
 
-Muestra el reporte detallado del modelo entrenado: accuracy por clase, matriz de confusion, y comparacion de algoritmos.
+Muestra el reporte del modelo de Machine Learning entrenado: exactitud por clase, matriz de confusion y comparacion de los 4 algoritmos probados.
+
+### Captura de dataset
+
+Permite capturar nuevas muestras de senas directamente desde el navegador (sin necesitar acceso al servidor):
+
+1. Selecciona la sena que quieres capturar en el campo "Clase"
+2. Coloca tu mano frente a la camara del computador
+3. Haz clic en "Iniciar captura" y mantente haciendo la sena
+4. El sistema captura automaticamente hasta 500 muestras
+5. Repite para cada sena
+
+### Entrenamiento
+
+Despues de capturar el dataset, puedes entrenar el modelo:
+
+1. Haz clic en **"Entrenar modelo"**
+2. Espera mientras el sistema prueba 4 algoritmos (barra de progreso)
+3. Al terminar se muestra el accuracy obtenido
+4. El modelo nuevo se carga automaticamente sin reiniciar
 
 ---
 
-## Parte 5: Configurar el bot de Telegram
+## Como configurar el bot de Telegram
 
-### Como obtener el Chat ID de tu grupo
+### Agregar el bot a un grupo
 
 1. Crea un grupo en Telegram o usa uno existente
 2. Agrega el bot **@IA1_G12_bot** al grupo
-3. Envia cualquier mensaje en el grupo
-4. Abre este enlace en el navegador (reemplaza TOKEN con el token real):
-   ```
-   https://api.telegram.org/bot<TOKEN>/getUpdates
-   ```
-5. Busca el campo `"chat"` → `"id"` en la respuesta. Ese es el Chat ID (puede ser negativo si es un grupo).
+3. El bot ya esta configurado con el chat del grupo del proyecto
 
-### Como configurar el Chat ID en la aplicacion
+### Para usar un grupo propio
 
-1. Ve al Panel Admin → pestana "Configuracion"
-2. Pega el Chat ID en el campo correspondiente
-3. Activa el switch "Envio a Telegram"
-4. Guarda los cambios
-5. Ahora el boton "Enviar a Telegram" en la vista principal enviara mensajes al grupo
+1. Agrega **@IA1_G12_bot** a tu grupo
+2. Envia cualquier mensaje en el grupo
+3. Abre en el navegador: `https://api.telegram.org/bot<TOKEN>/getUpdates`
+4. Busca el campo `"chat" -> "id"` — ese es tu Chat ID
+5. Ve al Panel Admin -> Configuracion -> pega el Chat ID y guarda
 
-### Comandos del bot (@IA1_G12_bot)
+### Comandos disponibles del bot
 
-Puedes enviarle comandos directamente al bot en Telegram:
+Puedes escribirle directamente al bot en Telegram:
 
-| Comando | Respuesta |
-|---------|-----------|
-| `/hola` | Saludo personalizado |
-| `/hora` | Hora actual en Guatemala |
-| `/contacto` | Informacion del grupo |
-| `/proyecto` | Descripcion del proyecto y repositorio |
-| `/senas` | Lista de senas reconocidas por el sistema |
-| `/ayuda` | Lista de todos los comandos disponibles |
+| Comando | Que hace |
+|---------|---------|
+| `/hola` | El bot te responde con un saludo |
+| `/hora` | Muestra la hora actual |
+| `/senas` | Lista las senas que reconoce el sistema |
+| `/ayuda` | Muestra todos los comandos disponibles |
 
 ---
 
-## Parte 6: Usar con Docker (opcional)
+## Preguntas frecuentes
 
-Si prefieres no instalar Python ni Node.js, puedes usar Docker:
+**El sistema no detecta mi mano**
+- Asegurate de tener buena iluminacion
+- Mantente a 30-60 cm de la camara
+- Asegurate de que el fondo no sea muy similar al color de tu mano
+- Verifica que la camara este activa (icono verde en la barra del navegador)
 
-### Requisitos
+**La sena se detecta pero con poca confianza**
+- Intenta hacer el gesto mas claro y definido
+- Mueve un poco la mano hasta encontrar el angulo donde la confianza suba
+- Puedes bajar el umbral de confianza en el Panel Admin si necesitas
 
-- Docker instalado
-- Docker Compose instalado
+**El boton "Enviar a Telegram" no funciona**
+- Verifica en el Panel Admin que el bot este activado
+- Verifica que el Chat ID este configurado correctamente
+- El Chat ID de grupos de Telegram generalmente es un numero negativo
 
-### Levantar el sistema
-
-```bash
-# Desde la carpeta HandTalkAI/
-docker-compose up --build
-```
-
-Esto inicia automaticamente el backend y el frontend. Espera a que ambos esten listos y abre **http://localhost:5173**.
-
-### Detener el sistema
-
-```bash
-docker-compose down
-```
+**No veo imagen de la camara**
+- Si el sistema esta en un servidor remoto (GCP), la camara del servidor puede no estar disponible — el stream estaria inactivo pero el resto del sistema funciona
+- En local, verifica que Docker tenga permiso para acceder a la camara
 
 ---
 
-## Soluciones a problemas comunes
+## Captura de pantalla de la interfaz
 
-**La camara no se detecta:**
-- Verifica que ningun otro programa este usando la camara
-- Si tienes varias camaras, presiona `C` en `capturar_dataset.py` para cambiar
+La interfaz principal muestra:
 
-**"Modelo no entrenado aun" en la interfaz:**
-- Asegura de haber corrido `python scripts/entrenar_modelo.py` y que termino sin errores
-- Verifica que existe el archivo `modelo/model.pkl`
-
-**El bot de Telegram no envia mensajes:**
-- Verifica que el Chat ID este configurado correctamente en el Panel Admin
-- Asegura de que la opcion "Envio a Telegram" este activada
-- El bot debe estar agregado al grupo de Telegram
-
-**La prediccion siempre muestra "Analizando..." sin detectar la sena:**
-- Baja el umbral de confianza en el Panel Admin (prueba con 50%)
-- Asegura de tener buena iluminacion
-- Coloca la mano a una distancia media de la camara (ni muy lejos ni muy cerca)
-
-**Error al iniciar el backend:**
-- Verifica que el entorno virtual esta activado: `source .venv/bin/activate`
-- Verifica que todas las dependencias estan instaladas: `pip install -r requirements.txt`
+```
+┌────────────────────────────────────────────────────────────┐
+│  HandTalk AI              [Vista Usuario]  [Admin]         │
+├─────────────────────────┬──────────────────────────────────┤
+│                         │                                  │
+│   [VIDEO EN VIVO]       │   Deteccion actual:              │
+│   con landmarks         │                                  │
+│   de la mano            │       HOLA                       │
+│                         │       Confianza: 95%             │
+│                         │                                  │
+│                         │   [Enviar a Telegram]            │
+│                         │                                  │
+├─────────────────────────┴──────────────────────────────────┤
+│  Historial de mensajes                  Lista de senas     │
+│  15:32  hola    95%  ✓                  hola               │
+│  15:30  si      88%  ✓                  si                 │
+│  15:28  excelente 91% -                 no  ...            │
+└────────────────────────────────────────────────────────────┘
+```

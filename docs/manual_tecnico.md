@@ -1,115 +1,123 @@
-# Manual Tecnico - HandTalk AI
+# Manual Tecnico — HandTalk AI
 
-**Proyecto 2 - Inteligencia Artificial 1**  
-**Universidad San Carlos de Guatemala - Facultad de Ingenieria**  
+**Proyecto 2 — Inteligencia Artificial 1**
+**Universidad San Carlos de Guatemala — Facultad de Ingenieria**
 **Grupo 12 | Jose Alberto Alarcon Chigua | 201346084**
 
 ---
 
 ## 1. Descripcion general del sistema
 
-HandTalk AI es un sistema de reconocimiento de senas del lenguaje LENSEGUA en tiempo real. Captura video desde una camara web, detecta la mano del usuario con MediaPipe, extrae 63 caracteristicas numericas (landmarks normalizados) y las clasifica con un modelo de Machine Learning entrenado con scikit-learn. El resultado se muestra en una interfaz Vue 3 y puede enviarse a un grupo de Telegram.
+HandTalk AI es un sistema web de reconocimiento de senas del lenguaje LENSEGUA en tiempo real. Captura video desde la camara del servidor, detecta la mano con MediaPipe Hands, extrae 63 caracteristicas numericas (landmarks normalizados) y las clasifica con un modelo SVM RBF entrenado con scikit-learn. El resultado se muestra en una interfaz Vue 3 y puede enviarse a un chat de Telegram mediante el bot @IA1_G12_bot.
+
+El sistema esta completamente contenido en Docker (dos contenedores: backend Flask y frontend Nginx) y puede desplegarse en local o en un servidor cloud como Google Cloud Platform.
 
 ---
 
 ## 2. Arquitectura general
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENTE (Navegador)                      │
-│                    Vue 3 + Vite  :5173                          │
-│   VistaUsuario.vue          VistaAdmin.vue                      │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │  HTTP (proxy Vite → Flask)
-┌──────────────────────▼──────────────────────────────────────────┐
-│                     BACKEND (Flask :5000)                       │
-│                                                                 │
-│  /video_feed  ←── MJPEG stream (hilo de camara)                 │
-│  /api/estado  ←── ultima prediccion                             │
-│  /api/senas   ←── lista de clases disponibles                   │
-│  /api/enviar_telegram  ←── envia mensaje al bot                 │
-│  /api/registrar_sena   ←── guarda en historial                  │
-│  /admin/*     ←── configuracion y metricas                      │
-│                                                                 │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────┐    │
-│  │ detector.py │  │predictor.py  │  │ telegram_bot.py     │    │
-│  │ (MediaPipe) │  │ (model.pkl)  │  │ (requests HTTP API) │    │
-│  └──────┬──────┘  └──────┬───────┘  └─────────────────────┘    │
-└─────────┼────────────────┼─────────────────────────────────────┘
-          │                │
-┌─────────▼────────────────▼─────────────────────────────────────┐
-│                    CAMARA WEB (OpenCV)                          │
-└─────────────────────────────────────────────────────────────────┘
-
-  Bot de Telegram: Cloudflare Worker (handtalk-ai-bot)
-  URL: https://handtalk-ai-bot.iam-289.workers.dev
+┌──────────────────────────────────────────────────────────────┐
+│                  CLIENTE (Navegador)                         │
+│              Vue 3 + Vite  :5173                             │
+│                                                              │
+│   VistaUsuario.vue              VistaAdmin.vue               │
+│   - Stream en vivo              - Config del sistema         │
+│   - Prediccion en tiempo real   - Metricas de uso            │
+│   - Envio a Telegram            - Entrenamiento del modelo   │
+│   - Historial de detecciones    - Captura del dataset        │
+│   - Lista de senas              - Historial y logs           │
+└──────────────────────────┬───────────────────────────────────┘
+                           │  HTTP / MJPEG (proxy Nginx → Flask)
+┌──────────────────────────▼───────────────────────────────────┐
+│                  BACKEND (Flask :5000)                       │
+│                                                              │
+│  Rutas publicas:                                             │
+│  GET  /video_feed          <- stream MJPEG con anotaciones   │
+│  GET  /api/estado          <- ultima prediccion + confianza  │
+│  GET  /api/senas           <- clases disponibles del modelo  │
+│  GET  /api/historial       <- ultimas 30 detecciones         │
+│  POST /api/capturar_sena   <- guarda deteccion en historial  │
+│  POST /api/enviar_telegram <- envia mensaje al bot           │
+│  GET  /api/salud           <- health check                   │
+│  GET  /api/camaras         <- lista camaras disponibles      │
+│  POST /api/cambiar_camara  <- cambia indice de camara activa │
+│  GET  /admin/config_publica                                  │
+│                                                              │
+│  Rutas admin (requieren sesion):                             │
+│  GET/POST /admin/config    <- ver y editar config.json       │
+│  GET  /admin/metricas      <- estadisticas agregadas         │
+│  GET  /admin/historial     <- historial paginado             │
+│  POST /admin/limpiar_historial                               │
+│  GET  /admin/modelo_info   <- reporte del modelo actual      │
+│  POST /admin/entrenar      <- lanza entrenamiento en hilo    │
+│  GET  /admin/estado_entrenamiento <- progreso del training   │
+│  POST /admin/capturar_frame <- frame base64 -> landmarks CSV │
+│  GET  /admin/progreso_captura <- conteo de muestras          │
+│                                                              │
+│  ┌────────────────┐ ┌───────────────┐ ┌──────────────────┐  │
+│  │  detector.py   │ │ predictor.py  │ │ telegram_bot.py  │  │
+│  │ (MediaPipe)    │ │ (model.pkl)   │ │ (API REST TG)    │  │
+│  └───────┬────────┘ └───────┬───────┘ └──────────────────┘  │
+└──────────┼──────────────────┼───────────────────────────────┘
+           │                  │
+┌──────────▼──────────────────▼──────────────────────────────┐
+│         CAMARA  /  MODELO  /  DATASET                       │
+│  cv2.VideoCapture     modelo/model.pkl    dataset.csv       │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Descripcion de archivos y carpetas
+## 3. Estructura de archivos
 
-### Raiz del proyecto
-
-| Archivo | Descripcion |
-|---------|-------------|
-| `main.py` | Entry point del backend Flask. Inicia el hilo de camara y arranca el servidor |
-| `requirements.txt` | Dependencias Python del proyecto |
-| `Dockerfile` | Imagen Docker del backend |
-| `docker-compose.yml` | Orquestacion de backend + frontend |
-| `.env` | Variables de entorno locales (no se sube al repo) |
-| `.env.example` | Plantilla del .env para nuevos desarrolladores |
-
-### `app/`
-
-| Archivo | Descripcion |
-|---------|-------------|
-| `__init__.py` | Factory de Flask: registra blueprints y habilita CORS |
-| `config/settings.py` | Lee y escribe `config/config.json`. Contiene valores por defecto |
-| `routes/main.py` | Blueprint principal: stream MJPEG, estado, envio a Telegram, senas disponibles |
-| `routes/admin.py` | Blueprint admin: config, metricas, historial, info del modelo |
-| `services/detector.py` | Inicializa MediaPipe Hands, normaliza landmarks, dibuja anotaciones |
-| `services/predictor.py` | Carga `model.pkl` de forma lazy y realiza predicciones |
-| `services/metricas.py` | Lee y escribe `logs/historial.json` con cada deteccion registrada |
-| `services/telegram_bot.py` | Envia mensajes de texto a la API de Telegram via HTTP |
-
-### `scripts/`
-
-| Archivo | Descripcion |
-|---------|-------------|
-| `capturar_dataset.py` | Herramienta interactiva para grabar el dataset con la camara |
-| `entrenar_modelo.py` | Entrena 4 algoritmos, selecciona el mejor y guarda `model.pkl` |
-| `demo_tarea4.py` | Demo standalone sin Flask para probar la deteccion rapida |
-
-### `frontend/`
-
-| Archivo | Descripcion |
-|---------|-------------|
-| `src/views/VistaUsuario.vue` | Vista principal: stream MJPEG, prediccion, captura de senas, envio a Telegram |
-| `src/views/VistaAdmin.vue` | Panel admin: configuracion, metricas, historial, info del modelo |
-| `src/App.vue` | Layout principal con navbar y router-view |
-| `src/router/index.js` | Rutas: `/` → VistaUsuario, `/admin` → VistaAdmin |
-| `vite.config.js` | Proxy de Vite: redirige `/api`, `/admin`, `/video_feed` al backend Flask |
-| `Dockerfile` | Imagen Docker del frontend |
-
-### `worker/`
-
-| Archivo | Descripcion |
-|---------|-------------|
-| `src/index.ts` | Bot de Telegram: comandos /hola, /hora, /contacto, /proyecto, /senas, /ayuda |
-| `wrangler.toml` | Configuracion de Cloudflare Workers (nombre: handtalk-ai-bot) |
-| `package.json` | Dependencias del worker (grammy, @cloudflare/workers-types) |
-
-### `dataset/`, `modelo/`, `logs/`, `config/`
-
-| Carpeta | Contenido |
-|---------|-----------|
-| `dataset/dataset.csv` | Landmarks normalizados de cada muestra: 63 columnas + etiqueta |
-| `modelo/model.pkl` | Modelo entrenado serializado con pickle |
-| `modelo/label_encoder.pkl` | LabelEncoder de scikit-learn para decodificar predicciones |
-| `modelo/reporte_metricas.txt` | Accuracy, precision, recall, F1 y matriz de confusion |
-| `logs/historial.json` | Registro de todas las detecciones con timestamp y confianza |
-| `config/config.json` | Configuracion activa del sistema (editada desde el panel admin) |
+```
+HandTalkAI/
+├── main.py                          # Entry point: inicia camara y servidor Flask
+├── requirements.txt                 # Dependencias Python
+├── Dockerfile                       # Imagen Docker del backend
+├── docker-compose.yml               # Orquestacion backend + frontend
+├── .env                             # Variables de entorno (no versionado)
+├── .env.example                     # Plantilla del .env
+│
+├── app/
+│   ├── __init__.py                  # Factory de Flask: blueprints, CORS
+│   ├── config/settings.py           # Lee/escribe config/config.json
+│   ├── routes/
+│   │   ├── main.py                  # Endpoints publicos
+│   │   ├── admin.py                 # Endpoints admin + entrenamiento
+│   │   └── captura.py               # Captura de dataset desde browser
+│   └── services/
+│       ├── detector.py              # MediaPipe: normaliza landmarks + quiralidad
+│       ├── predictor.py             # Carga model.pkl y realiza predicciones
+│       ├── metricas.py              # Lee/escribe logs/historial.json
+│       └── telegram_bot.py          # Envia mensajes a la API de Telegram
+│
+├── frontend/
+│   ├── Dockerfile                   # Build Vite + Nginx
+│   ├── vite.config.js               # Proxy /api y /admin -> backend :5000
+│   └── src/
+│       ├── App.vue                  # Layout con navbar
+│       ├── router/index.js          # Rutas: / y /admin
+│       └── views/
+│           ├── VistaUsuario.vue     # Pantalla principal del usuario
+│           └── VistaAdmin.vue       # Panel de administracion
+│
+├── dataset/
+│   ├── dataset.csv                  # 5000 muestras: 63 features + etiqueta
+│   └── evidencia/                   # Capturas de pantalla por clase
+│
+├── modelo/
+│   ├── model.pkl                    # Modelo SVM RBF serializado
+│   ├── label_encoder.pkl            # LabelEncoder para decodificar predicciones
+│   └── reporte_metricas.txt         # Accuracy, F1, matriz de confusion
+│
+├── config/config.json               # Configuracion activa del sistema
+├── logs/historial.json              # Registro de detecciones
+└── docs/
+    ├── manual_tecnico.md
+    └── manual_usuario.md
+```
 
 ---
 
@@ -117,175 +125,203 @@ HandTalk AI es un sistema de reconocimiento de senas del lenguaje LENSEGUA en ti
 
 ### 4.1 Extraccion de caracteristicas
 
-MediaPipe Hands detecta 21 landmarks tridimensionales (x, y, z) de la mano. El proceso de normalizacion en `detector.py` es:
+MediaPipe Hands detecta 21 landmarks tridimensionales (x, y, z). El proceso en `detector.py`:
 
-1. Restar la posicion de la muneca (landmark 0) para centrar todos los puntos
-2. Dividir entre la distancia maxima para normalizar la escala
-3. Aplanar la matriz 21x3 en un vector de 63 valores
+1. **Centrar en muneca**: restar landmark 0, invariante a posicion en el frame.
+2. **Normalizar escala**: dividir por distancia maxima, invariante al tamano de la mano.
+3. **Normalizar quiralidad**: si el pulgar (landmark 1) tiene `x > 0`, invertir todos los x. Hace el descriptor identico independiente de si el frame esta volteado o de que mano usa el usuario.
+4. **Aplanar**: matriz 21×3 -> vector de 63 valores.
 
-Este enfoque hace que las caracteristicas sean invariantes a la posicion de la mano en el frame y al tamano (distancia a la camara).
+```python
+puntos -= puntos[0]                    # centrar en muneca
+puntos /= np.max(np.abs(puntos))       # normalizar escala
+if puntos[1][0] > 0:                   # normalizar quiralidad
+    puntos[:, 0] *= -1
+return puntos.flatten().tolist()       # 63 features
+```
 
 ### 4.2 Dataset
 
-- Formato: CSV con columnas `landmark_0` ... `landmark_62`, `clase`
-- 10 clases: hola, gracias, si, no, ayuda, agua, bien, mal, por_favor, casa
-- 100 muestras por clase (1000 filas en total)
+| Parametro | Valor |
+|-----------|-------|
+| Formato | CSV: columna `clase` + 63 columnas de landmarks (x0..z20) |
+| Clases | hola, si, no, tu, yo, excelente, te_amo, igual, nombre, mucho |
+| Muestras por clase | 500 |
+| Total | 5,000 filas |
+| Captura | Panel Admin del sistema via getUserMedia del navegador |
+
+La captura se hace desde el panel web (ruta `/admin/capturar_frame`). El admin selecciona la clase y el frontend envia frames JPEG en base64 al backend cada 100ms. El backend procesa con MediaPipe y guarda los landmarks normalizados en el CSV.
 
 ### 4.3 Entrenamiento
 
-El script `entrenar_modelo.py` prueba 4 algoritmos:
+Se lanzan 4 algoritmos en paralelo y se selecciona el de mayor accuracy en cross-validation 5-fold:
 
-| Algoritmo | Parametros principales |
-|-----------|----------------------|
-| KNN | k=5, distancia euclidiana |
-| SVM RBF | C=10, kernel RBF, probability=True |
-| Random Forest | 150 arboles, random_state=42 |
-| Regresion Logistica | max_iter=1000, C=1.0 |
+| Algoritmo | Parametros | Accuracy CV |
+|-----------|-----------|-------------|
+| KNN | k=5 | 99.90% |
+| **SVM RBF** | **C=10, gamma='scale'** | **99.98%** |
+| Random Forest | 150 arboles | 100.00% |
+| Regresion Logistica | max_iter=1000 | 99.90% |
 
-Se selecciona el de mayor accuracy en el conjunto de prueba (80/20 split). El modelo ganador se guarda como `model.pkl`.
+El modelo ganador (SVM RBF) se guarda en `modelo/model.pkl`.
 
----
+### 4.4 Inferencia en tiempo real
 
-## 5. API REST del backend
+El hilo de camara (`_hilo_camara`) corre a ~30 fps:
 
-### Endpoints publicos (usuario)
-
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/video_feed` | Stream MJPEG de la camara con anotaciones |
-| GET | `/api/estado` | `{ sena_actual, confianza_actual, mano_detectada, modelo_listo }` |
-| GET | `/api/senas` | `{ senas: [...] }` lista de clases disponibles |
-| POST | `/api/registrar_sena` | Guarda una deteccion en el historial |
-| POST | `/api/enviar_telegram` | Envia `{ mensaje }` al bot de Telegram |
-| GET | `/api/salud` | Health check: `{ estado: "ok", modelo_listo }` |
-
-### Endpoints admin
-
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/admin/` | Config actual + resumen de metricas + estado del modelo |
-| POST | `/admin/config` | Actualiza campos de configuracion |
-| GET | `/admin/metricas` | Estadisticas agregadas del historial |
-| GET | `/admin/historial?limite=N` | Ultimas N detecciones |
-| POST | `/admin/limpiar_historial` | Borra el historial completo |
-| GET | `/admin/modelo_info` | Disponibilidad del modelo y reporte de metricas |
+```
+frame BGR
+   -> detector.procesar_frame()  -> vector 63 features
+   -> predictor.predecir()       -> clase + confianza
+   -> si confianza >= umbral: mostrar prediccion
+   -> cv2.flip(frame_anotado, 1) -> stream espejo para el usuario
+```
 
 ---
 
-## 6. Configuracion del sistema (config.json)
+## 5. Flujo de envio a Telegram
+
+```
+Usuario hace sena -> sistema detecta clase + confianza
+   -> clic en "Enviar a Telegram"
+   -> POST /api/enviar_telegram { mensaje, sena, confianza }
+   -> telegram_bot.py llama api.telegram.org/bot{TOKEN}/sendMessage
+   -> mensaje llega al chat configurado (chat_id en config.json)
+```
+
+---
+
+## 6. Configuracion (config.json)
 
 ```json
 {
   "umbral_confianza": 0.70,
-  "senas_disponibles": ["hola", "gracias", ...],
+  "senas_disponibles": ["hola", "si", "no", "tu", "yo",
+                         "excelente", "te_amo", "igual", "nombre", "mucho"],
   "formato_mensaje": "Deteccion HandTalk AI:\nSena: {sena}\nConfianza: {confianza:.0%}",
-  "telegram_activo": false,
-  "telegram_chat_id": "",
+  "telegram_activo": true,
+  "telegram_chat_id": "885855465",
   "historial_habilitado": true,
   "max_historial": 200
 }
 ```
 
-Para cambiar el comportamiento del sistema sin tocar codigo, editar estos valores desde el Panel Admin en `/admin` o directamente en `config/config.json`.
+Los cambios se aplican sin reiniciar el servidor. Se editan desde el Panel Admin o directamente en el archivo.
 
 ---
 
-## 7. Bot de Telegram
+## 7. Variables de entorno (.env)
 
-El bot `@IA1_G12_bot` corre como Cloudflare Worker en `https://handtalk-ai-bot.iam-289.workers.dev`. Funciona con webhook: Telegram envia cada mensaje al Worker, que responde y termina (no hay proceso permanente).
-
-### Como modificar el bot
-
-```bash
-cd worker/
-# Editar src/index.ts con los cambios
-wrangler deploy
-```
-
-### Como agregar un nuevo comando
-
-```typescript
-bot.command("nuevo_comando", async (ctx) => {
-  await ctx.reply("Respuesta del nuevo comando");
-});
-```
-
-### Como enviar mensajes desde el backend al grupo
-
-El backend usa `telegram_bot.py` que llama directamente a la API REST de Telegram `sendMessage`. Para que funcione:
-
-1. El usuario agrega `@IA1_G12_bot` a un grupo de Telegram
-2. Envia `/start` en el grupo para obtener el Chat ID
-3. Configura el Chat ID en el Panel Admin y activa "Envio a Telegram"
+| Variable | Descripcion | Valor por defecto |
+|----------|-------------|-------------------|
+| `TELEGRAM_TOKEN` | Token del bot de Telegram | (ver .env.example) |
+| `ADMIN_USER` | Usuario del panel admin | `admin` |
+| `ADMIN_PASSWORD` | Contrasena del panel admin | `handtalk2026` |
+| `CAMERA_INDEX` | Indice de camara a usar | `0` |
+| `DISABLE_CAMERA` | Si `true`, no abre camara (modo cloud) | `false` |
 
 ---
 
 ## 8. Contenerizacion con Docker
 
-### Construir y levantar
+### Levantar en local
 
 ```bash
-# Levantar todo el sistema
-docker-compose up --build
-
-# Solo el backend
-docker build -t handtalk-backend .
-docker run -p 5000:5000 --device /dev/video0 handtalk-backend
+git clone https://github.com/iamjalberto/IA1_1S2026_G12_Proyecto2
+cd IA1_1S2026_G12_Proyecto2/HandTalkAI
+cp .env.example .env
+docker compose up --build
 ```
 
-### Variables de entorno en Docker
+Acceder en: `http://localhost:5173` — admin en `http://localhost:5173/#/admin`
 
-El `docker-compose.yml` carga el archivo `.env` automaticamente. Asegurarse de que `.env` exista antes de hacer `docker-compose up`.
+### Levantar en GCP (sin camara)
 
-### Camara en Docker
-
-El contenedor necesita acceso al dispositivo de camara. Si la camara no es `/dev/video0`, editar el campo `devices` en `docker-compose.yml`:
-
-```yaml
-devices:
-  - "/dev/video2:/dev/video0"  # si tu camara es /dev/video2
+```bash
+export DISABLE_CAMERA=true
+docker compose up -d
 ```
+
+Con `DISABLE_CAMERA=true` el hilo de camara no intenta abrir ningun dispositivo. La captura del dataset y todo lo demas funciona normalmente via browser.
 
 ---
 
-## 9. Como extender el sistema
+## 9. Como agregar una nueva sena
 
-### Agregar una nueva sena
-
-1. Editar `CLASES` en `scripts/capturar_dataset.py` agregando el nombre de la sena
-2. Grabar muestras con `python scripts/capturar_dataset.py`
-3. Reentrenar el modelo: `python scripts/entrenar_modelo.py`
-4. Actualizar `senas_disponibles` en `config/config.json` (o desde el Panel Admin)
-5. Actualizar la lista `SENAS_DISPONIBLES` en `worker/src/index.ts` y redesplegar
-
-### Cambiar el algoritmo de ML
-
-En `scripts/entrenar_modelo.py`, modificar el diccionario `candidatos` dentro de `main()`. Agregar o quitar algoritmos de scikit-learn. El script siempre selecciona el de mejor accuracy automaticamente.
-
-### Cambiar el umbral de confianza
-
-Desde el Panel Admin en la interfaz web, o editando `umbral_confianza` en `config/config.json`. Rango recomendado: 0.60 - 0.90.
+1. Panel Admin -> "Captura de dataset" -> elegir nombre de nueva clase
+2. Capturar 100-500 muestras con la nueva sena frente a la camara
+3. Panel Admin -> "Entrenamiento" -> clic en "Entrenar modelo"
+4. El sistema actualiza automaticamente `config.json` con la nueva clase
 
 ---
 
-## 10. Dependencias
+## 10. Tecnologias utilizadas
 
-### Python (`requirements.txt`)
+| Capa | Tecnologia | Version |
+|------|-----------|---------|
+| Deteccion de mano | MediaPipe Hands | 0.10.21 |
+| Vision por computadora | OpenCV | 4.11.0 |
+| Machine Learning | scikit-learn | 1.8.0 |
+| Backend API | Flask + flask-cors | 3.1.3 |
+| Frontend | Vue 3 + Vite | 3.x / 6.x |
+| Contenedores | Docker + Docker Compose | 28.x |
+| Bot mensajeria | Telegram Bot API | REST |
 
-| Libreria | Version | Uso |
-|---------|---------|-----|
-| flask | 3.1.3 | Framework web del backend |
-| flask-cors | 5.0.1 | Habilita CORS para el frontend |
-| opencv-python | 4.11.0.86 | Captura de camara y procesamiento de imagen |
-| mediapipe | 0.10.21 | Deteccion de landmarks de la mano |
-| scikit-learn | 1.8.0 | Entrenamiento y prediccion del modelo |
-| numpy | - | Operaciones con arrays de landmarks |
-| python-dotenv | - | Carga del archivo .env |
-| requests | - | Llamadas a la API de Telegram |
+---
 
-### Node.js (worker)
+## 11. Diagramas
 
-| Paquete | Version | Uso |
-|---------|---------|-----|
-| grammy | ^1.30.0 | Framework del bot de Telegram |
-| @cloudflare/workers-types | ^4.0.0 | Tipos TypeScript para Cloudflare Workers |
+### Diagrama de flujo — Deteccion en tiempo real
+
+```
+  Camara (cv2.VideoCapture)
+          |
+          v
+  MediaPipe Hands detecta 21 puntos (x, y, z)
+          |
+          v
+  Normalizacion de landmarks:
+    1. Centrar en muneca (restar landmark 0)
+    2. Normalizar escala (dividir por max distancia)
+    3. Normalizar quiralidad (invertir x si pulgar > 0)
+    -> vector de 63 features
+          |
+          v
+  SVM RBF predice clase + confianza
+          |
+          v
+  confianza >= 0.70?
+    SI -> mostrar sena en stream y en UI
+    NO -> mostrar "Analizando..."
+          |
+          v (usuario decide enviar)
+  POST /api/enviar_telegram
+          |
+          v
+  Telegram API -> mensaje al chat configurado
+```
+
+### Diagrama de flujo — Entrenamiento
+
+```
+  Panel Admin: clic "Entrenar modelo"
+          |
+          v
+  Leer dataset.csv (5000 filas, 63 features)
+          |
+          v
+  Cross-validation 5-fold para 4 algoritmos:
+    KNN / SVM RBF / Random Forest / Regresion Logistica
+          |
+          v
+  Seleccionar mejor accuracy
+          |
+          v
+  Entrenar en dataset completo
+          |
+          v
+  Guardar model.pkl + label_encoder.pkl + reporte_metricas.txt
+          |
+          v
+  Recargar predictor.py en caliente (sin reiniciar Flask)
+```
