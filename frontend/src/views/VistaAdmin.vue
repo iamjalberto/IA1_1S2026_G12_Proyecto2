@@ -118,10 +118,11 @@
           ></textarea>
           <p class="campo-hint">
             Variables disponibles para personalizar el mensaje:
-            <br><code>{sena}</code> — nombre de la seña detectada (ej: <em>hola</em>)
-            <br><code>{confianza}</code> — nivel de confianza en decimal (ej: <em>0.97</em>)
-            <br><code>{confianza:.0%}</code> — confianza en porcentaje (ej: <em>97%</em>)
-            <br>El mensaje final incluye automaticamente el detalle de todas las senas capturadas.
+            <br /><code>{sena}</code> — nombre de la seña detectada (ej:
+            <em>hola</em>) <br /><code>{confianza}</code> — nivel de confianza
+            en decimal (ej: <em>0.97</em>) <br /><code>{confianza:.0%}</code> —
+            confianza en porcentaje (ej: <em>97%</em>) <br />El mensaje final
+            incluye automaticamente el detalle de todas las senas capturadas.
           </p>
         </div>
 
@@ -133,8 +134,36 @@
             placeholder="-1001234567890"
           />
           <p class="campo-hint">
-            ID del grupo o canal donde se enviaran los mensajes.
+            ID del grupo o canal donde se enviaran los mensajes. Para obtener tu
+            ID personal, abre el bot y envia <code>/start</code>.
           </p>
+        </div>
+
+        <!-- QR del bot: solo si el token esta configurado -->
+        <div v-if="botUsername" class="campo-grupo" style="text-align: center">
+          <label>Abrir bot en Telegram</label>
+          <p class="campo-hint" style="margin-bottom: 8px">
+            Escanea el codigo QR o haz clic en el enlace para abrir
+            <strong>@{{ botUsername }}</strong> y obtener tu Chat ID.
+          </p>
+          <img
+            :src="`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https://t.me/${botUsername}&bgcolor=1a1d2a&color=c8d0e0&margin=10`"
+            alt="QR del bot de Telegram"
+            style="border-radius: 8px; width: 160px; height: 160px"
+          />
+          <br />
+          <a
+            :href="`https://t.me/${botUsername}`"
+            target="_blank"
+            style="
+              font-size: 13px;
+              color: var(--azul);
+              margin-top: 6px;
+              display: inline-block;
+            "
+          >
+            https://t.me/{{ botUsername }}
+          </a>
         </div>
 
         <div class="campo-grupo">
@@ -896,6 +925,7 @@ const tabs = [
 ];
 
 const autenticado = ref(false);
+const botUsername = ref(null);
 const loginForm = ref({ usuario: "", contrasena: "" });
 const loginError = ref("");
 
@@ -976,9 +1006,20 @@ async function cargarDatos() {
     const res = await fetch("/admin/", { credentials: "include" });
     if (res.ok) {
       const data = await res.json();
-      // Solo sobreescribimos los campos que vienen del servidor, preservando ediciones locales
       Object.assign(config.value, data.config);
       resumen.value = data.resumen;
+    }
+  } catch {
+    /* sin conexion */
+  }
+}
+
+async function cargarBotInfo() {
+  try {
+    const res = await fetch("/admin/bot_info", { credentials: "include" });
+    if (res.ok) {
+      const data = await res.json();
+      botUsername.value = data.configurado ? data.username : null;
     }
   } catch {
     /* sin conexion */
@@ -1484,6 +1525,7 @@ onMounted(async () => {
         cargarModeloInfo();
         cargarSenas();
         cargarProgreso();
+        cargarBotInfo();
       }
     }
   } catch {

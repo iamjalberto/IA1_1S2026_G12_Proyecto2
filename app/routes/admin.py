@@ -5,6 +5,7 @@ import threading
 from functools import wraps
 
 import numpy as np
+import requests as http_requests
 from flask import Blueprint, request, jsonify, session
 from app.config.settings import cargar_config, guardar_config
 from app.services import metricas, predictor
@@ -107,6 +108,29 @@ def actualizar_config():
 @requiere_login
 def ver_metricas():
     return jsonify(metricas.obtener_resumen())
+
+
+@admin_bp.route("/bot_info")
+@requiere_login
+def bot_info():
+    """Consulta la API de Telegram para obtener el username del bot configurado."""
+    token = os.environ.get("TELEGRAM_TOKEN", "")
+    if not token or token == "tu_token_aqui":
+        return jsonify({"configurado": False, "username": None})
+    try:
+        resp = http_requests.get(
+            f"https://api.telegram.org/bot{token}/getMe", timeout=5
+        )
+        if resp.status_code == 200:
+            datos = resp.json().get("result", {})
+            return jsonify({
+                "configurado": True,
+                "username": datos.get("username"),
+                "nombre": datos.get("first_name"),
+            })
+    except Exception:
+        pass
+    return jsonify({"configurado": False, "username": None})
 
 
 @admin_bp.route("/historial")
