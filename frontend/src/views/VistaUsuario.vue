@@ -100,6 +100,7 @@
           @click="capturarSena"
         >
           + Capturar "{{ estado.sena_actual || "—" }}"
+          <span style="font-size: 10px; opacity: 0.6; margin-left: 8px">[Espacio]</span>
         </button>
       </div>
 
@@ -517,11 +518,23 @@ async function enviarTelegram() {
   }
 }
 
+function manejarTecla(e) {
+  // Barra espaciadora captura la sena, pero no si el foco esta en un input/textarea
+  if (e.code === "Space" && !modalHistorial.value) {
+    const tag = document.activeElement?.tagName;
+    if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "BUTTON") {
+      e.preventDefault();
+      capturarSena();
+    }
+  }
+}
+
 onMounted(() => {
   cargarSenas();
   cargarConfig();
   // El historial se carga al abrir el modal, no al montar
   iniciarCamara();
+  window.addEventListener("keydown", manejarTecla);
 });
 
 onUnmounted(() => {
@@ -529,6 +542,7 @@ onUnmounted(() => {
   if (streamCamara) {
     streamCamara.getTracks().forEach((t) => t.stop());
   }
+  window.removeEventListener("keydown", manejarTecla);
 });
 </script>
 
