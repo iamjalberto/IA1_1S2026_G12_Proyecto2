@@ -4,7 +4,40 @@
     <section class="panel-camara card">
       <div class="panel-camara__header">
         <h2 class="panel-titulo">Camara en tiempo real</h2>
-        <div style="display: flex; align-items: center; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <!-- Selector de camara del navegador -->
+          <select
+            v-model="camaraSeleccionada"
+            style="
+              background: #1a1d2a;
+              border: 1px solid #2a2d3e;
+              color: #c8d0e0;
+              border-radius: 6px;
+              padding: 3px 8px;
+              font-size: 12px;
+              cursor: pointer;
+            "
+            @change="cambiarCamaraNavegador"
+          >
+            <option v-if="camarasDisponibles.length === 0" value="">
+              Camara por defecto
+            </option>
+            <option
+              v-for="cam in camarasDisponibles"
+              :key="cam.deviceId"
+              :value="cam.deviceId"
+            >
+              {{ cam.label || `Camara ${cam.index + 1}` }}
+            </option>
+          </select>
+          <!-- Boton apagar/encender camara -->
+          <button
+            class="btn btn-gris"
+            style="padding: 3px 10px; font-size: 11px"
+            @click="camaraActiva ? apagarCamara() : iniciarCamara()"
+          >
+            {{ camaraActiva ? "Apagar" : "Encender" }}
+          </button>
           <span
             class="punto-vivo"
             :class="estado.mano_detectada ? 'verde' : 'gris'"
@@ -100,7 +133,9 @@
           @click="capturarSena"
         >
           + Capturar "{{ estado.sena_actual || "—" }}"
-          <span style="font-size: 10px; opacity: 0.6; margin-left: 8px">[Espacio]</span>
+          <span style="font-size: 10px; opacity: 0.6; margin-left: 8px"
+            >[Espacio]</span
+          >
         </button>
       </div>
 
@@ -330,22 +365,60 @@ function mostrarToast(texto, tipo = "exito") {
   }, 3000);
 }
 
-async function iniciarCamara() {
+async function iniciarCamara(deviceId = null) {
   try {
-    streamCamara = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480, facingMode: "user" },
+    // Si ya hay un stream activo, cerrarlo antes de abrir uno nuevo
+    if (streamCamara) {
+      streamCamara.getTracks().forEach((t) => t.stop());
+      streamCamara = null;
+    }
+    const constraints = {
+      video: deviceId
+        ? { deviceId: { exact: deviceId }, width: 640, height: 480 }
+        : { width: 640, height: 480, facingMode: "user" },
       audio: false,
-    });
+    };
+    streamCamara = await navigator.mediaDevices.getUserMedia(constraints);
     videoRef.value.srcObject = streamCamara;
     await videoRef.value.play();
     camaraActiva.value = true;
-    // Ajustar el canvas al tamaño del video
     canvasRef.value.width = 640;
     canvasRef.value.height = 480;
-    // Iniciar el ciclo de deteccion cada 150ms
-    intervaloDeteccion = setInterval(enviarFrameAlBackend, 150);
+    if (!intervaloDeteccion) {
+      intervaloDeteccion = setInterval(enviarFrameAlBackend, 150);
+    }
+    // Obtener la lista de camaras disponibles (requiere que el permiso ya este concedido)
+    const dispositivos = await navigator.mediaDevices.enumerateDevices();
+    camarasDisponibles.value = dispositivos
+      .filter((d) => d.kind === "videoinput")
+      .map((d, i) => ({ deviceId: d.deviceId, label: d.label, index: i }));
+    if (!camaraSeleccionada.value && camarasDisponibles.value.length > 0) {
+      camaraSeleccionada.value = camarasDisponibles.value[0].deviceId;
+    }
   } catch (e) {
     console.error("No se pudo acceder a la camara:", e);
+  }
+}
+
+function apagarCamara() {
+  clearInterval(intervaloDeteccion);
+  intervaloDeteccion = null;
+  if (streamCamara) {
+    streamCamara.getTracks().forEach((t) => t.stop());
+    streamCamara = null;
+  }
+  camaraActiva.value = false;
+  enVuelo = false;
+  // Limpiar el canvas
+  if (canvasRef.value) {
+    const ctx = canvasRef.value.getContext("2d");
+    ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height);
+  }
+}
+
+async function cambiarCamaraNavegador() {
+  if (camaraActiva.value) {
+    await iniciarCamara(camaraSeleccionada.value);
   }
 }
 
