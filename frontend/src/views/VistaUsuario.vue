@@ -330,30 +330,46 @@ async function iniciarCamara() {
   }
 }
 
+let enVuelo = false;
+
 async function enviarFrameAlBackend() {
   if (!videoRef.value || !canvasRef.value || !camaraActiva.value) return;
+  // Evitar multiples peticiones en paralelo que causan flicker
+  if (enVuelo) return;
+  enVuelo = true;
+
   const ctx = canvasRef.value.getContext("2d");
-  // Dibujar frame actual del video en el canvas (espejado para el usuario)
-  ctx.save();
-  ctx.translate(640, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(videoRef.value, 0, 0, 640, 480);
-  ctx.restore();
-  const frameB64 = canvasRef.value.toDataURL("image/jpeg", 0.7);
+
+  // Canvas auxiliar para capturar el frame sin flip (para enviarlo al backend)
+  const offscreen = document.createElement("canvas");
+  offscreen.width = 640;
+  offscreen.height = 480;
+  const octx = offscreen.getContext("2d");
+  octx.drawImage(videoRef.value, 0, 0, 640, 480);
+  const frameB64 = offscreen.toDataURL("image/jpeg", 0.7);
+
   try {
     const res = await fetch("/api/predecir_frame", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ frame: frameB64 }),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      // Si el backend no responde, al menos mostrar el video espejado
+      ctx.save();
+      ctx.translate(640, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(videoRef.value, 0, 0, 640, 480);
+      ctx.restore();
+      enVuelo = false;
+      return;
+    }
     const data = await res.json();
-    // Actualizar el estado con la prediccion recibida
     estado.value.sena_actual = data.sena ?? null;
     estado.value.confianza_actual = data.confianza ?? 0;
     estado.value.mano_detectada = data.mano_detectada ?? false;
     estado.value.modelo_listo = true;
-    // Dibujar el frame anotado devuelto por el backend
+    // El backend devuelve el frame anotado sin flip; lo mostramos espejado para el usuario
     if (data.frame_anotado) {
       const img = new Image();
       img.onload = () => {
@@ -362,11 +378,20 @@ async function enviarFrameAlBackend() {
         ctx.scale(-1, 1);
         ctx.drawImage(img, 0, 0, 640, 480);
         ctx.restore();
+        enVuelo = false;
       };
       img.src = data.frame_anotado;
+    } else {
+      enVuelo = false;
     }
   } catch {
-    /* fallo de red, continuar */
+    // Sin conexion: mostrar video espejado igual
+    ctx.save();
+    ctx.translate(640, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoRef.value, 0, 0, 640, 480);
+    ctx.restore();
+    enVuelo = false;
   }
 }
 
