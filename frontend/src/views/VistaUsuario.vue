@@ -192,73 +192,90 @@
         </div>
       </div>
 
-      <!-- Historial de detecciones -->
+      <!-- Boton para abrir el historial -->
       <div class="card" style="margin-top: 16px">
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-          "
+        <button
+          class="btn btn-gris"
+          style="width: 100%; justify-content: center; padding: 10px"
+          @click="abrirHistorial"
         >
-          <h2 class="panel-titulo">Historial de mensajes</h2>
-          <button
-            class="btn btn-gris"
-            style="padding: 4px 10px; font-size: 11px"
-            @click="cargarHistorial"
-          >
-            Actualizar
-          </button>
-        </div>
-        <div
-          v-if="historial.length === 0"
-          style="color: var(--texto-suave); font-size: 13px"
-        >
-          Sin detecciones registradas
-        </div>
-        <div v-else style="max-height: 220px; overflow-y: auto">
-          <table
-            style="width: 100%; border-collapse: collapse; font-size: 12px"
-          >
-            <thead>
-              <tr
-                style="
-                  color: var(--texto-suave);
-                  border-bottom: 1px solid #2a2d3e;
-                "
-              >
-                <th style="text-align: left; padding: 4px 6px">Hora</th>
-                <th style="text-align: left; padding: 4px 6px">Sena</th>
-                <th style="text-align: right; padding: 4px 6px">Conf.</th>
-                <th style="text-align: center; padding: 4px 6px">TG</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="(r, i) in historial"
-                :key="i"
-                style="border-bottom: 1px solid #1a1d2a"
-              >
-                <td style="padding: 4px 6px; color: var(--texto-suave)">
-                  {{ r.timestamp.slice(11, 19) }}
-                </td>
-                <td style="padding: 4px 6px; font-weight: 600">{{ r.sena }}</td>
-                <td style="padding: 4px 6px; text-align: right">
-                  {{ (r.confianza * 100).toFixed(0) }}%
-                </td>
-                <td style="padding: 4px 6px; text-align: center">
-                  <span v-if="r.enviado_telegram" style="color: #00cc88"
-                    >&#10003;</span
-                  >
-                  <span v-else style="color: #444">—</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          Ver historial de detecciones
+        </button>
       </div>
     </section>
+
+    <!-- Modal de historial -->
+    <Transition name="fade">
+      <div
+        v-if="modalHistorial"
+        class="modal-overlay"
+        @click.self="modalHistorial = false"
+      >
+        <div class="modal-caja">
+          <div class="modal-header">
+            <h2 class="panel-titulo">Historial de detecciones</h2>
+            <button
+              class="btn btn-gris"
+              style="padding: 4px 10px; font-size: 11px"
+              @click="modalHistorial = false"
+            >
+              Cerrar
+            </button>
+          </div>
+          <div
+            v-if="historial.length === 0"
+            style="color: var(--texto-suave); font-size: 13px; padding: 16px 0"
+          >
+            Sin detecciones registradas
+          </div>
+          <div
+            v-else
+            style="max-height: 420px; overflow-y: auto; margin-top: 12px"
+          >
+            <table
+              style="width: 100%; border-collapse: collapse; font-size: 13px"
+            >
+              <thead>
+                <tr
+                  style="
+                    color: var(--texto-suave);
+                    border-bottom: 1px solid #2a2d3e;
+                  "
+                >
+                  <th style="text-align: left; padding: 6px 8px">Hora</th>
+                  <th style="text-align: left; padding: 6px 8px">Sena</th>
+                  <th style="text-align: right; padding: 6px 8px">Conf.</th>
+                  <th style="text-align: center; padding: 6px 8px">TG</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(r, i) in historial"
+                  :key="i"
+                  style="border-bottom: 1px solid #1a1d2a"
+                >
+                  <td style="padding: 6px 8px; color: var(--texto-suave)">
+                    {{ r.timestamp.slice(11, 19) }}
+                  </td>
+                  <td style="padding: 6px 8px; font-weight: 600">
+                    {{ r.sena }}
+                  </td>
+                  <td style="padding: 6px 8px; text-align: right">
+                    {{ (r.confianza * 100).toFixed(0) }}%
+                  </td>
+                  <td style="padding: 6px 8px; text-align: center">
+                    <span v-if="r.enviado_telegram" style="color: #00cc88"
+                      >&#10003;</span
+                    >
+                    <span v-else style="color: #444">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Toast de notificacion -->
     <Transition name="toast">
@@ -293,6 +310,7 @@ const camaraSeleccionada = ref(0);
 const senasCapturadas = ref([]);
 const senasDisponibles = ref([]);
 const historial = ref([]);
+const modalHistorial = ref(false);
 const configTelegramActivo = ref(false);
 const enviandoTelegram = ref(false);
 const resultadoTelegram = ref(null);
@@ -419,6 +437,11 @@ async function cargarHistorial() {
   }
 }
 
+async function abrirHistorial() {
+  await cargarHistorial();
+  modalHistorial.value = true;
+}
+
 async function cargarConfig() {
   try {
     const res = await fetch("/admin/config_publica");
@@ -497,8 +520,7 @@ async function enviarTelegram() {
 onMounted(() => {
   cargarSenas();
   cargarConfig();
-  cargarHistorial();
-  // Iniciar la camara del navegador automaticamente
+  // El historial se carga al abrir el modal, no al montar
   iniciarCamara();
 });
 
@@ -664,5 +686,41 @@ onUnmounted(() => {
 .toast-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+/* Modal de historial */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal-caja {
+  background: var(--fondo-card, #1a1d2a);
+  border: 1px solid #2a2d3e;
+  border-radius: 12px;
+  padding: 24px;
+  width: 560px;
+  max-width: 95vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
